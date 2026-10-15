@@ -1,6 +1,8 @@
-import * as pdfjs from 'pdfjs-dist';
+// Build "legacy": compatível com navegadores que ainda não têm os recursos de
+// JavaScript mais recentes usados pela build padrão do pdf.js.
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 

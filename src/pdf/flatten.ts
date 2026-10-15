@@ -10,6 +10,7 @@ import {
 import { dataUrlMime, dataUrlToBytes } from '../lib/bytes';
 import { hexToArray, hexToRgb } from '../lib/color';
 import { pageGeom, placeBox, toPdf, type PageGeom } from './coords';
+import { removeTextInRects } from './contentText';
 import { BASELINE, FontCache, LINE_HEIGHT, safeText, wrapText } from './fonts';
 import type { EditObject, NoteObject, TextObject } from './types';
 
@@ -22,6 +23,19 @@ export async function flattenObjects(bytes: Uint8Array, objects: EditObject[]): 
   const doc = await PDFDocument.load(bytes);
   const fonts = new FontCache(doc);
   const pages = doc.getPages();
+
+  // Edição de texto existente: remove do conteúdo o trecho original antes de desenhar o novo.
+  pages.forEach((page, i) => {
+    const g = pageGeom(page);
+    const rects = objects
+      .filter((o): o is TextObject => o.kind === 'text' && o.page === i && !!o.cover)
+      .map((o) => {
+        const a = toPdf(g, o.cover!.x, o.cover!.y);
+        const b = toPdf(g, o.cover!.x + o.cover!.w, o.cover!.y + o.cover!.h);
+        return { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
+      });
+    if (rects.length) removeTextInRects(doc, page, rects);
+  });
 
   // Ordem de pintura: coberturas primeiro, depois marcações, por fim o resto.
   const order = (o: EditObject) =>
@@ -155,10 +169,13 @@ async function drawObject(doc: PDFDocument, page: PDFPage, g: PageGeom, o: EditO
 async function drawTextBox(page: PDFPage, g: PageGeom, o: TextObject, fonts: FontCache) {
   const font = await fonts.get(o.font, o.bold, o.italic);
   if (o.bg) {
-    const a = placeBox(g, o.x, o.y, o.h);
-    page.drawRectangle({ x: a.x, y: a.y, width: o.w, height: o.h, rotate: degrees(g.rot), color: hexToRgb(o.bg) });
+    for (const b of o.cover ? [o.cover, o] : [o]) {
+      const a = placeBox(g, b.x, b.y, b.h);
+      page.drawRectangle({ x: a.x, y: a.y, width: b.w, height: b.h, rotate: degrees(g.rot), color: hexToRgb(o.bg) });
+    }
   }
-  const lines = wrapText(font, safeText(font, o.text), o.size, Math.max(o.w, o.size));
+  const text = safeText(font, o.text);
+  const lines = o.nowrap ? text.split('\n') : wrapText(font, text, o.size, Math.max(o.w, o.size));
   lines.forEach((line, i) => {
     if (!line) return;
     const p = toPdf(g, o.x, o.y + i * o.size * LINE_HEIGHT + o.size * BASELINE);

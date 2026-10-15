@@ -7,6 +7,8 @@ export function Modal(props: {
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  /** Fica acima do aviso de "processando" (ex.: pedido de senha durante a abertura). */
+  top?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -17,7 +19,7 @@ export function Modal(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
+    <div className={`modal-backdrop ${props.top ? 'top' : ''}`} onMouseDown={(e) => e.target === e.currentTarget && props.onClose()}>
       <div className={`modal ${props.wide ? 'wide' : ''}`} ref={ref} role="dialog" aria-label={props.title}>
         <header>
           <h2>{props.title}</h2>

@@ -1,7 +1,7 @@
 import forge from 'node-forge';
 import { PDFDocument, degrees } from 'pdf-lib';
 import { P12Signer } from '@signpdf/signer-p12';
-import signpdf from '@signpdf/signpdf';
+import { SignPdf } from '@signpdf/signpdf';
 import { Buffer } from 'buffer';
 import { dataUrlMime, dataUrlToBytes } from '../lib/bytes';
 import { hexToRgb } from '../lib/color';
@@ -101,7 +101,8 @@ export async function signDigitally(bytes: Uint8Array, opt: DigitalSignOptions):
   });
   const prepared = await doc.save({ useObjectStreams: false });
   const signer = new P12Signer(Buffer.from(opt.p12), { passphrase: opt.passphrase });
-  const signed = await signpdf.sign(Buffer.from(prepared), signer, now);
+  // Classe nomeada: o export default do pacote (CommonJS) muda de forma no bundle do navegador.
+  const signed = await new SignPdf().sign(Buffer.from(prepared), signer, now);
   return new Uint8Array(signed);
 }
 

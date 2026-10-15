@@ -1,5 +1,5 @@
 import { MessageSquare } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { CSS_FONT, LINE_HEIGHT } from '../pdf/fonts';
 import { getTextBoxes, linesInRect, type TextBox } from '../pdf/textBoxes';
 import { hasBox, newId, type Box, type EditObject, type TextObject } from '../pdf/types';
@@ -220,9 +220,10 @@ export function Overlay({ page }: { page: number }) {
   const startEditText = (b: TextBox) => {
     const s = store();
     const pad = 1.5;
+    const cover = { x: b.x - pad, y: b.y - pad, w: b.w + pad * 2, h: b.h + pad * 2 };
     const o: TextObject = {
-      id: newId(), page, kind: 'text', x: b.x - pad, y: b.y - pad, w: b.w + pad * 2 + 2, h: b.h + pad * 2,
-      text: b.str, size: Math.round(b.size * 10) / 10, color: '#000000', font: b.font, bold: false, italic: false, bg: '#ffffff',
+      id: newId(), page, kind: 'text', ...cover, text: b.str, size: Math.round(b.size * 10) / 10, color: '#000000',
+      font: b.font, bold: false, italic: false, bg: '#ffffff', cover, nowrap: true,
     };
     s.addObject(o);
     s.setEditing(o.id);
@@ -312,12 +313,13 @@ export function Overlay({ page }: { page: number }) {
         const pos = { left: o.x, top: o.y, width: o.w, height: o.h };
         switch (o.kind) {
           case 'text':
-            return (
-              <TextEl key={o.id} o={o} editing={editingId === o.id} pos={pos}
+            return (<Fragment key={o.id}>
+              {o.cover && o.bg && <div className="cover-bg" style={{ left: o.cover.x, top: o.cover.y, width: o.cover.w, height: o.cover.h, background: o.bg }} />}
+              <TextEl o={o} editing={editingId === o.id} pos={pos}
                 onPointerDown={(e) => startMove(e, o)}
                 onDoubleClick={() => store().setEditing(o.id)}
                 onDone={finishEditing} />
-            );
+            </Fragment>);
           case 'image':
             return <img key={o.id} className="obj" src={o.dataUrl} style={{ ...pos, opacity: o.opacity }} draggable={false} onPointerDown={(e) => startMove(e, o)} alt="" />;
           case 'highlight':
@@ -368,7 +370,13 @@ export function Overlay({ page }: { page: number }) {
       {tool === 'editText' &&
         textBoxes.map((b, i) => (
           <div key={i} className="text-target" style={{ left: b.x, top: b.y, width: b.w, height: b.h }}
-            onPointerDown={(e) => { e.stopPropagation(); if (store().editingId) finishEditing(); startEditText(b); }} />
+            onPointerDown={(e) => {
+              // Sem preventDefault o navegador tira o foco da caixa de edição recém-criada.
+              e.preventDefault();
+              e.stopPropagation();
+              if (store().editingId) finishEditing();
+              startEditText(b);
+            }} />
         ))}
 
       {preview && gesture?.kind === 'create' && gesture.tool !== 'line' && gesture.tool !== 'arrow' && (
@@ -379,6 +387,11 @@ export function Overlay({ page }: { page: number }) {
       {selectedId && tool === 'select' && <Selection o={mine.find((o) => o.id === selectedId)} startResize={startResize} />}
     </div>
   );
+}
+
+let canvasCtx: CanvasRenderingContext2D | null = null;
+function measureCtx() {
+  return (canvasCtx ??= document.createElement('canvas').getContext('2d')!);
 }
 
 function TextEl(props: {
@@ -400,14 +413,29 @@ function TextEl(props: {
     fontWeight: o.bold ? 700 : 400,
     fontStyle: o.italic ? 'italic' : 'normal',
     background: o.bg ?? 'transparent',
+    whiteSpace: o.nowrap ? 'pre' : 'pre-wrap',
   };
   useEffect(() => {
-    if (editing && ta.current) {
-      ta.current.focus();
-      ta.current.setSelectionRange(ta.current.value.length, ta.current.value.length);
-    }
+    if (!editing) return;
+    const id = requestAnimationFrame(() => {
+      const el = ta.current;
+      if (!el) return;
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+    return () => cancelAnimationFrame(id);
   }, [editing]);
-  const grow = (el: HTMLTextAreaElement) => {
+  const grow = (el: HTMLTextAreaElement, text: string) => {
+    if (o.nowrap) {
+      // Mede com as mesmas métricas da fonte para a caixa acompanhar o texto.
+      const ctx = measureCtx();
+      ctx.font = `${o.italic ? 'italic ' : ''}${o.bold ? '700 ' : ''}${o.size}px ${CSS_FONT[o.font]}`;
+      const lines = text.split('\n');
+      const w = Math.max(o.cover?.w ?? 0, ...lines.map((l) => ctx.measureText(l).width + 4));
+      const h = Math.max(o.cover?.h ?? 0, lines.length * o.size * LINE_HEIGHT + 3);
+      useStore.getState().updateObject(o.id, { w, h });
+      return;
+    }
     if (el.scrollHeight > el.clientHeight + 1) useStore.getState().updateObject(o.id, { h: el.scrollHeight + 2 });
   };
   if (editing) {
@@ -421,7 +449,7 @@ function TextEl(props: {
         onPointerDown={(e) => e.stopPropagation()}
         onChange={(e) => {
           useStore.getState().updateObject(o.id, { text: e.target.value });
-          grow(e.target);
+          grow(e.target, e.target.value);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') props.onDone();

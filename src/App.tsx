@@ -71,7 +71,7 @@ function PromptHost() {
   useEffect(() => setValue(req?.initial ?? ''), [req]);
   if (!req) return null;
   return (
-    <Modal title={req.title} onClose={() => req.resolve(null)}
+    <Modal title={req.title} top onClose={() => req.resolve(null)}
       footer={<><button onClick={() => req.resolve(null)}>Cancelar</button><button className="primary" onClick={() => req.resolve(value)}>OK</button></>}>
       {req.message && <p>{req.message}</p>}
       <label className="field">

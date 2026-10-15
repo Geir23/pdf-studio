@@ -26,6 +26,10 @@ export interface TextObject extends Base, Box {
   italic: boolean;
   /** Cor de fundo para cobrir o texto original (usada em "Editar texto"). */
   bg: string | null;
+  /** Área do texto original a cobrir (edição de texto existente). */
+  cover?: Box | null;
+  /** Não quebra linhas: a caixa cresce com o texto (edição de texto existente). */
+  nowrap?: boolean;
 }
 
 export interface ImageObject extends Base, Box {
