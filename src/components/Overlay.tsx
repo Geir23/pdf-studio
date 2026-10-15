@@ -1,5 +1,5 @@
 import { MessageSquare } from 'lucide-react';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CSS_FONT, LINE_HEIGHT } from '../pdf/fonts';
 import { getTextBoxes, linesInRect, type TextBox } from '../pdf/textBoxes';
 import { hasBox, newId, type Box, type EditObject, type TextObject } from '../pdf/types';
@@ -415,15 +415,12 @@ function TextEl(props: {
     background: o.bg ?? 'transparent',
     whiteSpace: o.nowrap ? 'pre' : 'pre-wrap',
   };
-  useEffect(() => {
-    if (!editing) return;
-    const id = requestAnimationFrame(() => {
-      const el = ta.current;
-      if (!el) return;
-      el.focus({ preventScroll: true });
-      el.setSelectionRange(el.value.length, el.value.length);
-    });
-    return () => cancelAnimationFrame(id);
+  // Foco síncrono (antes da próxima pintura) para nenhuma tecla escapar da caixa.
+  useLayoutEffect(() => {
+    const el = ta.current;
+    if (!editing || !el) return;
+    el.focus({ preventScroll: true });
+    el.setSelectionRange(el.value.length, el.value.length);
   }, [editing]);
   const grow = (el: HTMLTextAreaElement, text: string) => {
     if (o.nowrap) {
