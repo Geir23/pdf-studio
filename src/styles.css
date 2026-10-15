@@ -296,6 +296,7 @@ legend { color: var(--muted); font-size: 12.5px; padding: 0 4px; }
 .diff p { margin: 0; white-space: pre-wrap; line-height: 1.5; font-size: 13px; }
 ins { background: #d3f9d8; color: #1b5e20; text-decoration: none; }
 del { background: #ffe3e3; color: #b71c1c; }
+del + ins { margin-left: 3px; }
 .saved-sigs { display: flex; flex-wrap: wrap; gap: 8px; }
 .saved-sig { display: flex; align-items: flex-start; border: 1px solid var(--border); border-radius: 6px; }
 .saved-sig > button:first-child { border: 0; background: #fff; }

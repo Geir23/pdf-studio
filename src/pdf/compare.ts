@@ -1,6 +1,18 @@
-import { diffWordsWithSpace, type Change } from 'diff';
+import { diffArrays } from 'diff';
 import { pageLines } from './convert';
 import type { PDFDocumentProxy } from './pdfjs';
+
+export interface Change {
+  value: string;
+  added?: boolean;
+  removed?: boolean;
+}
+
+/** Diferença por palavras inteiras ("1.000,00" é uma unidade, não três). */
+function diffWords(a: string, b: string): Change[] {
+  const tok = (s: string) => s.split(/(\s+)/).filter(Boolean);
+  return diffArrays(tok(a), tok(b)).map((c) => ({ value: c.value.join(''), added: c.added, removed: c.removed }));
+}
 
 export interface PageDiff {
   page: number;
@@ -23,7 +35,7 @@ export async function compareDocuments(a: PDFDocumentProxy, b: PDFDocumentProxy)
   const n = Math.max(ta.length, tb.length);
   const result: PageDiff[] = [];
   for (let i = 0; i < n; i++) {
-    const changes = diffWordsWithSpace(ta[i] ?? '', tb[i] ?? '');
+    const changes = diffWords(ta[i] ?? '', tb[i] ?? '');
     const count = (c: Change[]) => c.reduce((s, x) => s + x.value.split(/\s+/).filter(Boolean).length, 0);
     result.push({
       page: i,

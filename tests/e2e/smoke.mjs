@@ -246,6 +246,94 @@ async function main() {
     await (await dl).saveAs(docx);
     const docXml = execFileSync('unzip', ['-p', docx, 'word/document.xml'], { encoding: 'utf8' });
     check('exporta para Word com o texto', /Faturamento/i.test(docXml));
+
+    // ---------- Segunda rodada: demais ferramentas ----------
+    const open = async (file) => {
+      const c = page.waitForEvent('filechooser');
+      await page.getByRole('button', { name: 'Abrir' }).first().click();
+      await (await c).setFiles(file);
+      await page.locator('.page[data-page="0"] canvas:not(.loading)').waitFor();
+    };
+    const tool = async (name) => {
+      await page.getByRole('button', { name: 'Ferramentas' }).click();
+      await page.locator('.tool-card', { hasText: name }).click();
+    };
+    await open(join(OUT, 'contrato.pdf'));
+
+    // Assinatura eletrônica desenhada
+    await page.getByRole('button', { name: 'Preencher e assinar (assinatura eletrônica)' }).click();
+    const pad = await page.locator('.sig-pad').boundingBox();
+    await page.mouse.move(pad.x + 40, pad.y + 60); await page.mouse.down();
+    for (let k = 0; k < 20; k++) await page.mouse.move(pad.x + 40 + k * 15, pad.y + 60 + Math.sin(k) * 25);
+    await page.mouse.up();
+    await page.getByRole('button', { name: 'Usar esta assinatura' }).click();
+    const pb = await page.locator('.page[data-page="0"]').boundingBox();
+    await page.mouse.click(pb.x + 400, pb.y + 300);
+    check('assinatura eletrônica posicionada', (await page.locator('.page[data-page="0"] img.obj').count()) === 1);
+
+    // Numeração de páginas
+    await tool('Numeração e rodapé');
+    await page.getByRole('button', { name: 'Aplicar' }).click();
+    await page.waitForTimeout(500);
+    dl = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Salvar' }).click();
+    const numbered = join(OUT, 'contrato-numerado.pdf');
+    await (await dl).saveAs(numbered);
+    const nt = text(numbered);
+    check('numeração de páginas', nt.includes('Página 1 de 3') && nt.includes('Página 3 de 3'));
+    const imgs = execFileSync('pdfimages', ['-list', numbered], { encoding: 'utf8' }).split('\n').filter((l) => /^\s+1\s/.test(l));
+    check('assinatura eletrônica gravada como imagem', imgs.length >= 1);
+
+    // Combinar com outro arquivo
+    await tool('Combinar arquivos');
+    const mc = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Adicionar PDFs…' }).click();
+    await (await mc).setFiles([join(OUT, 'scan.pdf')]);
+    await page.locator('.file-list li').waitFor();
+    await page.getByRole('button', { name: 'Combinar e abrir' }).click();
+    await page.waitForTimeout(800);
+    check('combinar arquivos (3 + 1 páginas)', (await page.locator('.page').count()) === 4);
+
+    // Dividir a cada 2 páginas -> zip com 2 arquivos
+    await tool('Dividir');
+    await page.locator('.modal input.inline-num').fill('2');
+    dl = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Dividir e baixar (.zip)' }).click();
+    const zipPath = join(OUT, 'dividido.zip');
+    await (await dl).saveAs(zipPath);
+    const entries = execFileSync('unzip', ['-Z1', zipPath], { encoding: 'utf8' }).trim().split('\n');
+    check('dividir em arquivos', entries.length === 2, entries.join(', '));
+
+    // Comprimir sem perdas
+    await tool('Comprimir');
+    await page.getByRole('button', { name: 'Comprimir', exact: true }).click();
+    await page.locator('.modal .result').waitFor();
+    check('comprimir mostra o resultado', /→/.test(await page.locator('.modal .result').innerText()));
+    await page.keyboard.press('Escape');
+
+    // Imagens para PDF
+    await tool('Imagens para PDF');
+    const ic = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Adicionar imagens' }).click();
+    await (await ic).setFiles([join(OUT, 'scan.png'), join(OUT, '01-inicio.png')]);
+    await page.locator('.image-grid figure').nth(1).waitFor();
+    dl = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Baixar PDF' }).click();
+    const fromImgs = join(OUT, 'imagens.pdf');
+    await (await dl).saveAs(fromImgs);
+    check('imagens para PDF', /Pages:\s+2/.test(execFileSync('pdfinfo', [fromImgs], { encoding: 'utf8' })));
+
+    // Comparar com a versão editada
+    await open(join(OUT, 'contrato.pdf'));
+    await tool('Comparar arquivos');
+    const cc = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: 'Escolher arquivo…' }).click();
+    await (await cc).setFiles(join(OUT, 'contrato-editado.pdf'));
+    await page.locator('.diff section').first().waitFor();
+    const diffText = await page.locator('.diff').innerText();
+    check('comparar mostra o valor alterado', diffText.includes('2.500,00') && diffText.includes('1.000,00'));
+    await page.screenshot({ path: join(OUT, '06-comparar.png') });
+    await page.keyboard.press('Escape');
   } catch (e) {
     await page.screenshot({ path: join(OUT, 'erro.png') });
     console.error('ERRO:', e.message.split('\n').slice(0, 3).join(' '));
