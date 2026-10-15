@@ -152,3 +152,40 @@ describe('reordenação com árvore de páginas aninhada', () => {
     expect(pagesText(out)).toEqual(['Pagina 2', 'Pagina 1', 'Pagina 2', 'Pagina 1']);
   });
 });
+
+describe('várias assinaturas', () => {
+  it('a segunda assinatura não invalida a primeira', async () => {
+    const p12a = await generateTestCertificate('Primeiro Signatario', '', 'a');
+    const p12b = await generateTestCertificate('Segundo Signatario', '', 'b');
+    const base = { page: 0, reason: '', location: '', contact: '', imageDataUrl: null };
+    const once = await signDigitally(await samplePdf(1), { ...base, p12: p12a, passphrase: 'a', box: { x: 40, y: 700, w: 200, h: 50 } });
+    const twice = await signDigitally(once, { ...base, p12: p12b, passphrase: 'b', box: { x: 300, y: 700, w: 200, h: 50 } });
+    const report = execFileSync('pdfsig', [writeTmp(twice)], { encoding: 'utf8' });
+    expect(report).toContain('Primeiro Signatario');
+    expect(report).toContain('Segundo Signatario');
+    expect(report.match(/Signature is Valid/g)?.length).toBe(2);
+  });
+});
+
+describe('verificação de assinaturas', () => {
+  it('detecta assinatura válida, adulterada e alterações posteriores', async () => {
+    const { verifySignatures } = await import('../../src/pdf/verify');
+    const p12 = await generateTestCertificate('Verificado Silva', '', 'x');
+    const base = { page: 0, reason: 'Teste', location: '', contact: '', imageDataUrl: null, p12, passphrase: 'x' };
+    const once = await signDigitally(await samplePdf(1), { ...base, box: { x: 40, y: 700, w: 200, h: 50 } });
+    const [ok] = await verifySignatures(once);
+    expect(ok).toMatchObject({ valid: true, signer: 'Verificado Silva', reason: 'Teste', coversWholeDocument: true, selfSigned: true });
+
+    const tampered = once.slice();
+    const i = Buffer.from(tampered).indexOf('/Type /Page');
+    expect(i).toBeGreaterThan(0);
+    tampered[i + 1] = 't'.charCodeAt(0); // altera um byte coberto pela assinatura
+    const [bad] = await verifySignatures(tampered);
+    expect(bad.valid).toBe(false);
+    expect(bad.error).toMatch(/alterado/);
+
+    const twice = await signDigitally(once, { ...base, box: { x: 300, y: 700, w: 200, h: 50 } });
+    const reports = await verifySignatures(twice);
+    expect(reports.map((r) => [r.valid, r.coversWholeDocument])).toEqual([[true, false], [true, true]]);
+  });
+});

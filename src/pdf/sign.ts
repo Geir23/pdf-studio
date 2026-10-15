@@ -71,7 +71,9 @@ export interface DigitalSignOptions {
 export async function signDigitally(bytes: Uint8Array, opt: DigitalSignOptions): Promise<Uint8Array> {
   const info = readCertificate(opt.p12, opt.passphrase);
   const now = new Date();
-  const doc = await PDFDocument.load(bytes);
+  // Salvamento incremental: o arquivo original fica intacto e as assinaturas anteriores
+  // continuam válidas.
+  const doc = await PDFDocument.load(bytes, { forIncrementalUpdate: true });
   const page = doc.getPage(opt.page);
   const g = pageGeom(page);
 

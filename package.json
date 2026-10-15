@@ -32,6 +32,7 @@
     "diff": "^9.0.0",
     "docx": "^9.11.0",
     "jszip": "^3.10.2",
+    "lucide-react": "^1.57.0",
     "node-forge": "^1.4.0",
     "pdf-lib": "npm:@cantoo/pdf-lib@2.11.1",
     "pdfjs-dist": "^6.4.299",
