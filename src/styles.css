@@ -124,6 +124,12 @@ main { flex: 1; display: flex; min-height: 0; }
 .thumb.drop-after { box-shadow: 0 3px 0 var(--select); }
 .outline { list-style: none; padding-left: 12px; margin: 0; }
 .outline > li { margin: 3px 0; }
+.outline-row { display: flex; align-items: center; gap: 2px; }
+.sidebar-panel > button { white-space: normal; text-align: left; }
+.outline-row > button.link, .outline-row > input { flex: 1; text-align: left; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.outline-actions { display: none; }
+.outline-row:hover .outline-actions, .outline-row:focus-within .outline-actions { display: inline-flex; }
+.outline-actions button.icon { padding: 2px; }
 .sidebar-panel > .outline { padding-left: 0; }
 .search-form { display: flex; gap: 6px; }
 .search-form input { flex: 1; }
@@ -157,6 +163,9 @@ mark { background: #ffe066; color: inherit; }
   position: absolute; bottom: -18px; right: 0; font-size: 11px; color: var(--muted); pointer-events: none;
 }
 .page .textLayer { z-index: 1; }
+.page .pdf-link { position: absolute; z-index: 2; cursor: pointer; }
+.page .pdf-link:hover { background: rgba(26, 115, 232, 0.12); outline: 1px solid rgba(26, 115, 232, 0.5); }
+.viewer:not(.tool-select) .pdf-link { pointer-events: none; }
 .viewer:not(.tool-select) .page .textLayer { pointer-events: none; }
 
 .overlay { position: absolute; left: 0; top: 0; transform-origin: 0 0; z-index: 2; pointer-events: none; }
@@ -176,6 +185,13 @@ mark { background: #ffe066; color: inherit; }
 }
 .tool-select .overlay .text-obj:hover, .overlay .text-obj.editing { border-color: var(--select); }
 .overlay .text-obj.editing { cursor: text; overflow: hidden; }
+.overlay .field-obj {
+  border: 1.5px dashed #5b7bd5; background: rgba(91, 123, 213, 0.12); font-size: 9px; color: #34508f;
+  display: flex; align-items: center; padding: 0 3px; overflow: hidden; white-space: nowrap;
+}
+.overlay .field-radio { border-radius: 50%; }
+.overlay .field-signature { align-items: flex-end; padding-bottom: 3px; }
+.overlay .link-obj { border: 1.5px dashed #1a73e8; background: rgba(26, 115, 232, 0.08); }
 .overlay .cover-bg { position: absolute; pointer-events: none; }
 .overlay .placeholder { color: #9aa3b2; }
 .overlay .note-wrap { position: absolute; }

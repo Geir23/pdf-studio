@@ -2,7 +2,11 @@ import { MessageSquare } from 'lucide-react';
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { CSS_FONT, LINE_HEIGHT } from '../pdf/fonts';
 import { getTextBoxes, linesInRect, type TextBox } from '../pdf/textBoxes';
-import { hasBox, newId, type Box, type EditObject, type TextObject } from '../pdf/types';
+import { hasBox, newId, type Box, type EditObject, type FieldType, type TextObject } from '../pdf/types';
+
+const FIELD_PREFIX: Record<FieldType, string> = {
+  text: 'texto', multiline: 'texto', checkbox: 'caixa', radio: 'opcao', dropdown: 'lista', signature: 'assinatura',
+};
 import { imageFileToDataUrl, pickFiles } from '../lib/files';
 import { useStore, type Tool } from '../store';
 
@@ -14,7 +18,11 @@ type Gesture =
   | { kind: 'move'; id: string; start: Pt; orig: EditObject }
   | { kind: 'resize'; id: string; handle: string; start: Pt; orig: EditObject };
 
-const DRAG_TOOLS: Tool[] = ['rect', 'ellipse', 'line', 'arrow', 'highlight', 'underline', 'strike', 'whiteout', 'redact', 'digitalSignature'];
+const DRAG_TOOLS: Tool[] = ['rect', 'ellipse', 'line', 'arrow', 'highlight', 'underline', 'strike', 'whiteout', 'redact', 'digitalSignature', 'field', 'link'];
+
+const FIELD_DEFAULT: Record<FieldType, [number, number]> = {
+  text: [180, 22], multiline: [240, 70], checkbox: [14, 14], radio: [14, 14], dropdown: [160, 22], signature: [200, 60],
+};
 
 function rectFrom(a: Pt, b: Pt): Box {
   return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) };
@@ -206,6 +214,28 @@ export function Overlay({ page }: { page: number }) {
       case 'redact':
         if (!tiny) s.addObject({ id: newId(), page, kind: 'redact', ...r, color: '#000000' });
         break;
+      case 'field': {
+        const ft = style.fieldType;
+        const [dw, dh] = FIELD_DEFAULT[ft];
+        const box = r.w < 8 || r.h < 8 ? { x: g.start.x, y: g.start.y, w: dw, h: dh } : r;
+        const count = s.objects.filter((o) => o.kind === 'field').length + 1;
+        s.addObject({
+          id: newId(), page, kind: 'field', ...box, fieldType: ft, name: ft === 'radio' ? 'opcoes' : `${FIELD_PREFIX[ft]}${count}`,
+          options: ft === 'dropdown' ? ['Opção 1', 'Opção 2'] : ft === 'radio' ? [`opcao${count}`] : [], value: '', fontSize: 11, required: false,
+        });
+        s.setTool('select');
+        store().select(store().objects[store().objects.length - 1].id);
+        break;
+      }
+      case 'link':
+        if (r.w < 6 || r.h < 6) {
+          s.toast('Arraste para marcar a área que será clicável.');
+          break;
+        }
+        s.addObject({ id: newId(), page, kind: 'link', ...r, url: '', targetPage: 0 });
+        s.setTool('select');
+        store().select(store().objects[store().objects.length - 1].id);
+        break;
       case 'digitalSignature':
         if (r.w < 40 || r.h < 20) {
           s.toast('Desenhe um retângulo maior para a assinatura.');
@@ -335,6 +365,17 @@ export function Overlay({ page }: { page: number }) {
             return <div key={o.id} className="obj cover" style={{ ...pos, background: o.color }} onPointerDown={(e) => startMove(e, o)} />;
           case 'redact':
             return <div key={o.id} className="obj redact" style={pos} title="Área a redigir (removida ao salvar)" onPointerDown={(e) => startMove(e, o)} />;
+          case 'field':
+            return (
+              <div key={o.id} className={`obj field-obj field-${o.fieldType}`} style={pos} onPointerDown={(e) => startMove(e, o)} title={o.name}>
+                {o.fieldType === 'checkbox' || o.fieldType === 'radio' ? null : <span>{o.fieldType === 'signature' ? '✍ ' : ''}{o.name}{o.fieldType === 'dropdown' ? ' ▾' : ''}</span>}
+              </div>
+            );
+          case 'link':
+            return (
+              <div key={o.id} className="obj link-obj" style={pos} onPointerDown={(e) => startMove(e, o)}
+                title={o.url ? `Link: ${o.url}` : `Link para a página ${o.targetPage + 1}`} />
+            );
         }
         return null;
       })}

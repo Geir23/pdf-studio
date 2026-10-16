@@ -1,5 +1,5 @@
 import {
-  BookMarked, Copy, Download, FilePlus2, FileStack, FileSignature, FormInput, Layers, MessageSquare, RotateCcw,
+  ArrowDown, ArrowUp, BookMarked, Copy, Crosshair, Download, Pencil, Plus, FilePlus2, FileStack, FileSignature, FormInput, Layers, MessageSquare, RotateCcw,
   RotateCw, Search, ShieldCheck, ShieldAlert, Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -7,6 +7,7 @@ import { baseName, download } from '../lib/bytes';
 import { pickFiles } from '../lib/files';
 import { readPdfFile } from '../lib/openFlow';
 import { pageLines } from '../pdf/convert';
+import { readOutline, writeOutline, type OutlineItem } from '../pdf/outline';
 import {
   deletePages, duplicatePages, extractPages, insertBlankPage, insertPdf, reorderPages, rotatePages,
 } from '../pdf/pages';
@@ -199,42 +200,105 @@ function PagesPanel() {
 
 // ---------------- Marcadores ----------------
 
-interface OutlineNode {
-  title: string;
-  dest: string | unknown[] | null;
-  items: OutlineNode[];
+type Path = number[];
+
+function getList(tree: OutlineItem[], path: Path): OutlineItem[] {
+  return path.slice(0, -1).reduce((list, i) => list[i].children, tree);
 }
 
 function OutlinePanel() {
-  const view = useStore((s) => s.view);
-  const [items, setItems] = useState<OutlineNode[] | null>(null);
-  useEffect(() => {
-    view?.getOutline().then((o) => setItems((o as OutlineNode[] | null) ?? []));
-  }, [view]);
+  const bytes = useStore((s) => s.bytes);
+  const [items, setItems] = useState<OutlineItem[] | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const s = useStore.getState;
 
-  const go = async (node: OutlineNode) => {
-    if (!view || !node.dest) return;
-    const dest = typeof node.dest === 'string' ? await view.getDestination(node.dest) : node.dest;
-    if (!dest) return;
-    const ref = dest[0];
-    const index = typeof ref === 'number' ? ref : await view.getPageIndex(ref as never);
-    useStore.getState().goToPage(index);
+  useEffect(() => {
+    if (!bytes) return;
+    readOutline(bytes).then(setItems).catch(() => setItems([]));
+  }, [bytes]);
+
+  const save = (next: OutlineItem[], label = 'Marcadores') => {
+    setItems(next);
+    void s().run('Atualizando marcadores…', () => s().apply(label, (b) => writeOutline(b, next)));
+  };
+  const clone = () => structuredClone(items ?? []);
+
+  const add = (parent: Path | null) => {
+    const next = clone();
+    const node: OutlineItem = { title: `Página ${s().currentPage + 1}`, page: s().currentPage, children: [] };
+    if (parent) {
+      const list = getList(next, parent);
+      list[parent[parent.length - 1]].children.push(node);
+    } else next.push(node);
+    save(next, 'Adicionar marcador');
+  };
+  const remove = (path: Path) => {
+    const next = clone();
+    getList(next, path).splice(path[path.length - 1], 1);
+    save(next, 'Excluir marcador');
+  };
+  const move = (path: Path, d: number) => {
+    const next = clone();
+    const list = getList(next, path);
+    const i = path[path.length - 1];
+    if (i + d < 0 || i + d >= list.length) return;
+    [list[i], list[i + d]] = [list[i + d], list[i]];
+    save(next, 'Mover marcador');
+  };
+  const rename = (path: Path) => {
+    const next = clone();
+    const node = getList(next, path)[path[path.length - 1]];
+    if (!draft.trim() || draft === node.title) return setEditing(null);
+    node.title = draft.trim();
+    setEditing(null);
+    save(next, 'Renomear marcador');
+  };
+  const setPage = (path: Path) => {
+    const next = clone();
+    getList(next, path)[path[path.length - 1]].page = s().currentPage;
+    save(next, 'Destino do marcador');
   };
 
-  const render = (nodes: OutlineNode[]) => (
+  const render = (nodes: OutlineItem[], parent: Path) => (
     <ul className="outline">
-      {nodes.map((n, i) => (
-        <li key={i}>
-          <button className="link" onClick={() => go(n)}>{n.title}</button>
-          {n.items?.length > 0 && render(n.items)}
-        </li>
-      ))}
+      {nodes.map((n, i) => {
+        const path = [...parent, i];
+        const key = path.join('.');
+        return (
+          <li key={key}>
+            <div className="outline-row">
+              {editing === key ? (
+                <input autoFocus value={draft} onChange={(e) => setDraft(e.target.value)} onBlur={() => rename(path)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') rename(path); if (e.key === 'Escape') setEditing(null); }} />
+              ) : (
+                <button className="link" onClick={() => n.page !== null && s().goToPage(n.page)} onDoubleClick={() => { setEditing(key); setDraft(n.title); }}
+                  title={n.page !== null ? `Página ${n.page + 1} — clique duplo para renomear` : 'Destino desconhecido'}>{n.title}</button>
+              )}
+              <span className="outline-actions">
+                <button className="icon" title="Renomear" onClick={() => { setEditing(key); setDraft(n.title); }}><Pencil size={13} /></button>
+                <button className="icon" title="Apontar para a página atual" onClick={() => setPage(path)}><Crosshair size={13} /></button>
+                <button className="icon" title="Adicionar submarcador (página atual)" onClick={() => add(path)}><Plus size={13} /></button>
+                <button className="icon" title="Subir" onClick={() => move(path, -1)} disabled={i === 0}><ArrowUp size={13} /></button>
+                <button className="icon" title="Descer" onClick={() => move(path, 1)} disabled={i === nodes.length - 1}><ArrowDown size={13} /></button>
+                <button className="icon danger" title="Excluir" onClick={() => remove(path)}><Trash2 size={13} /></button>
+              </span>
+            </div>
+            {n.children.length > 0 && render(n.children, path)}
+          </li>
+        );
+      })}
     </ul>
   );
 
   if (items === null) return <p className="hint">Carregando…</p>;
-  if (!items.length) return <p className="hint">Este documento não tem marcadores.</p>;
-  return render(items);
+  return (
+    <>
+      <button onClick={() => add(null)}><Plus size={16} /> Novo marcador (página atual)</button>
+      {!items.length && <p className="hint">Este documento não tem marcadores.</p>}
+      {render(items, [])}
+    </>
+  );
 }
 
 // ---------------- Pesquisa ----------------

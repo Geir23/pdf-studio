@@ -9,6 +9,25 @@ interface Props {
   height: number;
 }
 
+interface PageLink {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  url?: string;
+  dest?: unknown;
+}
+
+async function goToDest(dest: unknown) {
+  const view = useStore.getState().view;
+  if (!view || !dest) return;
+  const explicit = typeof dest === 'string' ? await view.getDestination(dest) : (dest as unknown[]);
+  const ref = explicit?.[0];
+  if (ref == null) return;
+  const index = typeof ref === 'number' ? ref : await view.getPageIndex(ref as never);
+  useStore.getState().goToPage(index);
+}
+
 function normalize(s: string) {
   return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
@@ -45,6 +64,7 @@ export function PageView({ index, width, height }: Props) {
   const textRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const [rendered, setRendered] = useState(false);
+  const [links, setLinks] = useState<PageLink[]>([]);
 
   useEffect(() => {
     const el = ref.current;
@@ -95,6 +115,17 @@ export function PageView({ index, width, height }: Props) {
           viewport,
         });
         await textLayer.render();
+        const annots = await page.getAnnotations();
+        if (!cancelled) {
+          const found: PageLink[] = [];
+          for (const a of annots) {
+            if (a.subtype !== 'Link' || (!a.url && !a.dest)) continue;
+            const [x1, y1] = viewport.convertToViewportPoint(a.rect[0], a.rect[1]);
+            const [x2, y2] = viewport.convertToViewportPoint(a.rect[2], a.rect[3]);
+            found.push({ left: Math.min(x1, x2), top: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1), url: a.url, dest: a.dest });
+          }
+          setLinks(found);
+        }
         if (!cancelled && highlight) highlightMatches(container, highlight);
       } catch (e) {
         if (!(e instanceof pdfjs.RenderingCancelledException)) console.error(e);
@@ -135,6 +166,22 @@ export function PageView({ index, width, height }: Props) {
           } as React.CSSProperties
         }
       />
+      {links.map((l, i) => (
+        <a
+          key={i}
+          className="pdf-link"
+          style={{ left: l.left, top: l.top, width: l.width, height: l.height }}
+          href={l.url ?? '#'}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={l.url ?? 'Ir para a página'}
+          onClick={(e) => {
+            if (l.url) return;
+            e.preventDefault();
+            void goToDest(l.dest);
+          }}
+        />
+      ))}
       <Overlay page={index} />
       <div className="page-number">{index + 1}</div>
     </div>

@@ -4,7 +4,7 @@ import { flattenObjects } from './pdf/flatten';
 import { openPdf, type PDFDocumentProxy } from './pdf/pdfjs';
 import { rasterizePages } from './pdf/render';
 import { encryptPdf, type ProtectOptions } from './pdf/tools';
-import type { Box, EditObject, FontFamily } from './pdf/types';
+import type { Box, EditObject, FieldType, FontFamily } from './pdf/types';
 
 export type Tool =
   | 'select'
@@ -24,7 +24,9 @@ export type Tool =
   | 'note'
   | 'image'
   | 'signature'
-  | 'digitalSignature';
+  | 'digitalSignature'
+  | 'field'
+  | 'link';
 
 export interface ToolStyle {
   color: string; // traço / texto
@@ -36,6 +38,7 @@ export interface ToolStyle {
   font: FontFamily;
   bold: boolean;
   italic: boolean;
+  fieldType: FieldType;
 }
 
 interface Snapshot {
@@ -223,6 +226,7 @@ export const useStore = create<Store>((set, get) => {
       font: 'Helvetica',
       bold: false,
       italic: false,
+      fieldType: 'text',
     },
     selectedId: null,
     editingId: null,

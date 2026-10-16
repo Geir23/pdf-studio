@@ -135,7 +135,7 @@ async function main() {
     await page.waitForTimeout(800);
 
     // Formulário
-    await page.getByRole('button', { name: 'Formulário' }).click();
+    await page.getByRole('button', { name: 'Formulário', exact: true }).click();
     await page.locator('.form-fields input').first().fill('Maria da Silva');
     await page.getByRole('button', { name: 'Aplicar ao documento' }).click();
     await page.waitForTimeout(800);
@@ -322,6 +322,34 @@ async function main() {
     const fromImgs = join(OUT, 'imagens.pdf');
     await (await dl).saveAs(fromImgs);
     check('imagens para PDF', /Pages:\s+2/.test(execFileSync('pdfinfo', [fromImgs], { encoding: 'utf8' })));
+
+    // Campos de formulário, link e marcador
+    await open(join(OUT, 'contrato.pdf'));
+    const fb = await page.locator('.page[data-page="0"]').boundingBox();
+    await page.getByRole('button', { name: 'Criar campo de formulário' }).click();
+    await page.mouse.click(fb.x + 60, fb.y + 250);
+    await page.locator('.properties input').first().fill('cpf');
+    await page.getByRole('button', { name: 'Criar campo de formulário' }).click();
+    await page.locator('.properties select').selectOption('checkbox');
+    await page.mouse.click(fb.x + 60, fb.y + 300);
+    await page.getByRole('button', { name: 'Criar link' }).click();
+    await page.mouse.move(fb.x + 60, fb.y + 340); await page.mouse.down();
+    await page.mouse.move(fb.x + 220, fb.y + 360, { steps: 3 }); await page.mouse.up();
+    await page.locator('.properties input[placeholder="https://"]').fill('www.exemplo.com.br');
+    await page.getByRole('button', { name: 'Marcadores', exact: true }).click();
+    await page.getByRole('button', { name: 'Novo marcador (página atual)' }).click();
+    await page.locator('.outline-row').first().waitFor();
+    await page.screenshot({ path: join(OUT, '07-campos.png') });
+    dl = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Salvar' }).click();
+    const withFields = join(OUT, 'contrato-campos.pdf');
+    await (await dl).saveAs(withFields);
+    const fdoc = await PDFDocument.load(readFileSync(withFields));
+    const fnames = fdoc.getForm().getFields().map((f) => f.getName());
+    check('cria campos de formulário', fnames.includes('cpf') && fnames.some((n) => n.startsWith('caixa')), fnames.join(', '));
+    const uris = fdoc.getPage(0).node.Annots()?.asArray().map((r) => fdoc.context.lookup(r).lookup(PDFName.of('A'))?.lookup?.(PDFName.of('URI'))?.decodeText?.()).filter(Boolean) ?? [];
+    check('cria link', uris.includes('https://www.exemplo.com.br'), uris.join(', '));
+    check('cria marcador', fdoc.catalog.lookup(PDFName.of('Outlines')) !== undefined);
 
     // Comparar com a versão editada
     await open(join(OUT, 'contrato.pdf'));

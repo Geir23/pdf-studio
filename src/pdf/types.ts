@@ -84,6 +84,28 @@ export interface NoteObject extends Base {
   author: string;
 }
 
+export type FieldType = 'text' | 'multiline' | 'checkbox' | 'radio' | 'dropdown' | 'signature';
+
+/** Campo de formulário a ser criado no PDF. */
+export interface FieldObject extends Base, Box {
+  kind: 'field';
+  fieldType: FieldType;
+  name: string;
+  /** Opções da lista suspensa; para botões de opção, o valor deste botão. */
+  options: string[];
+  value: string;
+  fontSize: number;
+  required: boolean;
+}
+
+/** Link clicável: para um endereço da internet ou para uma página do documento. */
+export interface LinkObject extends Base, Box {
+  kind: 'link';
+  url: string;
+  /** Página de destino (base 0) quando url estiver vazio. */
+  targetPage: number;
+}
+
 export type EditObject =
   | TextObject
   | ImageObject
@@ -92,7 +114,9 @@ export type EditObject =
   | InkObject
   | MarkupObject
   | CoverObject
-  | NoteObject;
+  | NoteObject
+  | FieldObject
+  | LinkObject;
 
 export type BoxObject = Extract<EditObject, Box>;
 

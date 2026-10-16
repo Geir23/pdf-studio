@@ -11,6 +11,7 @@ import { dataUrlMime, dataUrlToBytes } from '../lib/bytes';
 import { hexToArray, hexToRgb } from '../lib/color';
 import { pageGeom, placeBox, toPdf, type PageGeom } from './coords';
 import { removeTextInRects } from './contentText';
+import { addFormField, addLink } from './fields';
 import { BASELINE, FontCache, LINE_HEIGHT, safeText, wrapText } from './fonts';
 import type { EditObject, NoteObject, TextObject } from './types';
 
@@ -163,6 +164,12 @@ async function drawObject(doc: PDFDocument, page: PDFPage, g: PageGeom, o: EditO
 
     case 'note':
       return addNoteAnnotation(doc, page, g, o);
+
+    case 'field':
+      return addFormField(doc, page, o);
+
+    case 'link':
+      return addLink(doc, page, o);
   }
 }
 

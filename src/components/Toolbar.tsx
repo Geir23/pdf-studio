@@ -1,7 +1,7 @@
 import {
   ArrowUpRight, ChevronLeft, ChevronRight, Circle, Eraser, FileSignature, FolderOpen, Hand, Highlighter, Image,
   LayoutGrid, Minus, MousePointer2, PenLine, PenTool, Plus, Printer, Redo2, Save, Square, Strikethrough,
-  TextCursorInput, Type, Underline, Undo2, MessageSquare, SquareDashed, Signature, Maximize2,
+  TextCursorInput, Type, Underline, FormInput, Link2, Undo2, MessageSquare, SquareDashed, Signature, Maximize2,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { saveDocument, printDocument } from '../lib/actions';
@@ -111,6 +111,9 @@ const TOOLS: ({ id: Tool; label: string; icon: typeof Type; key?: string } | 'se
   'sep',
   { id: 'signature', label: 'Preencher e assinar (assinatura eletrônica)', icon: Signature },
   { id: 'digitalSignature', label: 'Assinatura digital com certificado', icon: FileSignature },
+  'sep',
+  { id: 'field', label: 'Criar campo de formulário', icon: FormInput, key: 'F' },
+  { id: 'link', label: 'Criar link', icon: Link2, key: 'L' },
 ];
 
 export function EditBar() {
