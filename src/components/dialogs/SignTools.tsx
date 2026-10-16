@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { saveDocument } from '../../lib/actions';
 import { download } from '../../lib/bytes';
 import { imageFileToDataUrl, pickFiles } from '../../lib/files';
-import { generateTestCertificate, readCertificate, signDigitally, type CertInfo } from '../../pdf/sign';
+import { desktop, type WindowsCertificate } from '../../lib/desktop';
+import { generateTestCertificate, readCertificate, signDigitally, type CertInfo, type DigitalSignOptions } from '../../pdf/sign';
 import { useStore } from '../../store';
 import { Check, Field, Modal } from '../ui';
 import { close } from './common';
@@ -238,7 +239,25 @@ export function DigitalSignDialog() {
   const [contact, setContact] = useState('');
   const [useImage, setUseImage] = useState(false);
   const [gen, setGen] = useState<{ name: string; email: string; pass: string } | null>(null);
+  const onWindows = desktop?.platform === 'win32';
+  const [source, setSource] = useState<'file' | 'windows'>(onWindows ? 'windows' : 'file');
+  const [winCerts, setWinCerts] = useState<WindowsCertificate[] | null>(null);
+  const [thumb, setThumb] = useState('');
   const saved = loadSaved();
+
+  useEffect(() => {
+    if (source !== 'windows' || winCerts) return;
+    desktop!.listCertificates()
+      .then((list) => {
+        setWinCerts(list);
+        if (list[0]) setThumb(list[0].thumbprint);
+      })
+      .catch((e) => {
+        setWinCerts([]);
+        s().toast(`Não foi possível ler os certificados do Windows: ${(e as Error).message}`, 'error');
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source]);
   const s = useStore.getState;
 
   const cancel = () => {
@@ -262,13 +281,23 @@ export function DigitalSignDialog() {
 
   const sign = async () => {
     if (security) return s().toast('Remova a proteção por senha antes de assinar (Ferramentas › Proteger). A proteção regravaria o arquivo e invalidaria a assinatura.', 'error');
-    if (!p12) return s().toast('Escolha o arquivo do certificado (.pfx ou .p12).', 'error');
-    if (!check()) return;
-    const ok = await s().run('Assinando…', () =>
+    let external: DigitalSignOptions['external'];
+    if (source === 'windows') {
+      const cert = winCerts?.find((c) => c.thumbprint === thumb);
+      if (!cert) return s().toast('Escolha um certificado.', 'error');
+      external = {
+        info: { ...cert, validFrom: new Date(cert.validFrom), validTo: new Date(cert.validTo) },
+        sign: (data) => desktop!.signWithCertificate(cert.thumbprint, data),
+      };
+    } else {
+      if (!p12) return s().toast('Escolha o arquivo do certificado (.pfx ou .p12).', 'error');
+      if (!check()) return;
+    }
+    const ok = await s().run(source === 'windows' ? 'Assinando… (o Windows pode pedir o PIN do token)' : 'Assinando…', () =>
       s().apply('Assinatura digital', (b) =>
         signDigitally(b, {
-          p12: p12.bytes, passphrase: pass, page: pending?.page ?? currentPage, box: pending?.box ?? null,
-          reason, location, contact, imageDataUrl: useImage && saved[0] ? saved[0] : null,
+          p12: p12?.bytes ?? new Uint8Array(), passphrase: pass, page: pending?.page ?? currentPage, box: pending?.box ?? null,
+          reason, location, contact, imageDataUrl: useImage && saved[0] ? saved[0] : null, external,
         }), { allowOnSigned: true }),
     );
     if (!ok) return;
@@ -305,9 +334,31 @@ export function DigitalSignDialog() {
   return (
     <Modal title="Assinatura digital" onClose={cancel} footer={<><button onClick={cancel}>Cancelar</button><button className="primary" onClick={sign}>Assinar</button></>}>
       <p className="hint">
-        Assina com certificado digital A1 (arquivo .pfx/.p12), no padrão PKCS#7 (adbe.pkcs7.detached), reconhecido pelo Adobe Reader.
+        Assina com certificado digital{onWindows ? ' (instalado no Windows ou arquivo .pfx)' : ' A1 (arquivo .pfx/.p12)'}, no padrão PKCS#7 (adbe.pkcs7.detached), reconhecido pelo Adobe Reader.
         {pending ? ` A assinatura aparecerá na página ${pending.page + 1}.` : ' Sem área desenhada: a assinatura será invisível.'}
       </p>
+      {onWindows && (
+        <div className="segmented">
+          <button className={source === 'windows' ? 'active' : ''} onClick={() => setSource('windows')}>Instalado no Windows (A1 ou token A3)</button>
+          <button className={source === 'file' ? 'active' : ''} onClick={() => setSource('file')}>Arquivo .pfx</button>
+        </div>
+      )}
+      {source === 'windows' ? (
+        <Field label="Certificado" hint="Certificados com chave privada no repositório pessoal do Windows. Tokens e cartões A3 aparecem aqui com o leitor conectado.">
+          {winCerts === null ? <span className="hint">Lendo certificados…</span> : winCerts.length === 0 ? (
+            <span className="warn">Nenhum certificado válido encontrado. Conecte o token/cartão e reabra esta janela.</span>
+          ) : (
+            <select value={thumb} onChange={(e) => setThumb(e.target.value)}>
+              {winCerts.map((c) => (
+                <option key={c.thumbprint} value={c.thumbprint}>
+                  {c.commonName} — {c.issuer || 'emissor desconhecido'} (até {new Date(c.validTo).toLocaleDateString('pt-BR')})
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      ) : (
+        <>
       <Field label="Certificado">
         <div className="row">
           <button onClick={async () => {
@@ -316,16 +367,18 @@ export function DigitalSignDialog() {
           }}>Escolher arquivo…</button>
           <span className="name">{p12?.name ?? 'nenhum'}</span>
         </div>
-      </Field>
-      <Field label="Senha do certificado">
+        </Field>
+        <Field label="Senha do certificado">
         <input type="password" value={pass} onChange={(e) => { setPass(e.target.value); setInfo(null); }} onBlur={() => p12 && pass && check()} />
-      </Field>
-      {info && (
+        </Field>
+        {info && (
         <div className="cert-info">
           <strong>{info.commonName}</strong>
           <small>Emitido por: {info.issuer || '—'}{info.selfSigned ? ' (autoassinado)' : ''}</small>
           <small>Válido até {info.validTo.toLocaleDateString('pt-BR')}{info.validTo < new Date() ? ' — VENCIDO' : ''}</small>
         </div>
+      )}
+        </>
       )}
       <div className="grid2">
         <Field label="Motivo"><input value={reason} placeholder="Ex.: Aprovo este documento" onChange={(e) => setReason(e.target.value)} /></Field>
@@ -335,7 +388,7 @@ export function DigitalSignDialog() {
       {pending && saved[0] && <Check label="Incluir minha assinatura manuscrita salva na aparência" checked={useImage} onChange={setUseImage} />}
       <p className="hint">
         Não tem certificado? <button className="link" onClick={() => setGen({ name: '', email: '', pass: '' })}>Gerar um certificado de teste</button>.
-        Certificados A3 (token/cartão) não podem ser usados pelo navegador.
+        {!desktop && 'Certificados A3 (token/cartão) funcionam na versão desktop para Windows.'}
       </p>
     </Modal>
   );

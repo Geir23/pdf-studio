@@ -9,6 +9,7 @@ import { EditBar, TOOL_KEYS, TopBar } from './components/Toolbar';
 import { Modal, Progress } from './components/ui';
 import { printDocument, saveDocument } from './lib/actions';
 import { pickFiles } from './lib/files';
+import { desktop } from './lib/desktop';
 import { openFile } from './lib/openFlow';
 import { usePrompt } from './lib/prompt';
 import { useStore } from './store';
@@ -128,11 +129,17 @@ export default function App() {
       if (tool && s.bytes) s.setTool(tool);
     };
     const onUnload = (e: BeforeUnloadEvent) => {
-      if (useStore.getState().dirty) e.preventDefault();
+      // No desktop quem pergunta é a janela nativa (ver electron/main.cjs).
+      if (!desktop && useStore.getState().dirty) e.preventDefault();
     };
+    const stopDirty = desktop ? useStore.subscribe((st, prev) => st.dirty !== prev.dirty && desktop!.setDirty(st.dirty)) : undefined;
     window.addEventListener('keydown', onKey);
     window.addEventListener('beforeunload', onUnload);
+    // Versão desktop: arquivos abertos pelo Windows ("Abrir com", duplo clique).
+    const stopDesktop = desktop?.onOpenFile((name, bytes) => void openFile(new File([bytes as BlobPart], name, { type: 'application/pdf' })));
     return () => {
+      stopDesktop?.();
+      stopDirty?.();
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('beforeunload', onUnload);
     };

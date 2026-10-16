@@ -1,0 +1,60 @@
+name: App desktop (Windows)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Certificado de teste no repositório do Windows
+        shell: pwsh
+        run: |
+          New-SelfSignedCertificate -Subject 'CN=PDF Studio Teste CI' -CertStoreLocation Cert:\CurrentUser\My `
+            -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyUsage DigitalSignature `
+            -NotAfter (Get-Date).AddDays(2) | Format-List Subject, Thumbprint
+
+      - name: Teste da assinatura com certificado do Windows (caminho dos tokens A3)
+        run: npx vitest run tests/unit/wincert.test.ts
+
+      - run: npm run build
+
+      - name: Gerar instalador e versão portátil
+        run: npx electron-builder --win --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDF-Studio-Windows
+          path: release/*.exe
+
+      - name: Publicar para download
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-v${{ github.run_number }}
+          name: PDF Studio para Windows (build ${{ github.run_number }})
+          make_latest: true
+          files: release/*.exe
+          body: |
+            **Instalador:** `PDF-Studio-…-x64-nsis.exe` (instala e cria atalho).
+            **Portátil:** `PDF-Studio-…-portatil.exe` (roda sem instalar).
+
+            O Windows pode mostrar "O Windows protegeu o computador" porque o programa não tem
+            assinatura de código paga: clique em "Mais informações" › "Executar assim mesmo".
+
+            Gerado a partir do commit ${{ github.sha }}.

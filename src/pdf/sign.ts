@@ -1,7 +1,7 @@
 import forge from 'node-forge';
 import { PDFDocument, degrees } from 'pdf-lib';
 import { P12Signer } from '@signpdf/signer-p12';
-import { SignPdf } from '@signpdf/signpdf';
+import { SignPdf, Signer } from '@signpdf/signpdf';
 import { Buffer } from 'buffer';
 import { dataUrlMime, dataUrlToBytes } from '../lib/bytes';
 import { hexToRgb } from '../lib/color';
@@ -66,10 +66,26 @@ export interface DigitalSignOptions {
   contact: string;
   /** Imagem da assinatura manuscrita para compor a aparência (opcional). */
   imageDataUrl: string | null;
+  /**
+   * Assinatura feita fora do navegador (ex.: repositório de certificados do Windows,
+   * incluindo tokens e cartões A3). Recebe os bytes a assinar e devolve o PKCS#7 (DER).
+   * Quando presente, p12/passphrase são ignorados.
+   */
+  external?: { info: CertInfo; sign: (data: Uint8Array) => Promise<Uint8Array> };
+}
+
+/** Adapta uma função de assinatura externa à interface da @signpdf. */
+class ExternalSigner extends Signer {
+  constructor(private fn: (data: Uint8Array) => Promise<Uint8Array>) {
+    super();
+  }
+  async sign(pdfBuffer: Buffer): Promise<Buffer> {
+    return Buffer.from(await this.fn(new Uint8Array(pdfBuffer)));
+  }
 }
 
 export async function signDigitally(bytes: Uint8Array, opt: DigitalSignOptions): Promise<Uint8Array> {
-  const info = readCertificate(opt.p12, opt.passphrase);
+  const info = opt.external ? opt.external.info : readCertificate(opt.p12, opt.passphrase);
   const now = new Date();
   // Salvamento incremental: o arquivo original fica intacto e as assinaturas anteriores
   // continuam válidas.
@@ -100,7 +116,9 @@ export async function signDigitally(bytes: Uint8Array, opt: DigitalSignOptions):
     fieldName: nextSignatureFieldName(doc),
   });
   const prepared = await doc.save({ useObjectStreams: false });
-  const signer = new P12Signer(Buffer.from(opt.p12), { passphrase: opt.passphrase });
+  const signer = opt.external
+    ? new ExternalSigner(opt.external.sign)
+    : new P12Signer(Buffer.from(opt.p12), { passphrase: opt.passphrase });
   // Classe nomeada: o export default do pacote (CommonJS) muda de forma no bundle do navegador.
   const signed = await new SignPdf().sign(Buffer.from(prepared), signer, now);
   return new Uint8Array(signed);

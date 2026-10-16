@@ -3,3 +3,4 @@ dist/
 public/vendor/
 *.tsbuildinfo
 test-output/
+release/

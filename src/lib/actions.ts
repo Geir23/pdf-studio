@@ -1,10 +1,12 @@
 import { useStore } from '../store';
 import { download } from './bytes';
+import { desktop } from './desktop';
 
 type SaveHandle = { createWritable(): Promise<{ write(d: BlobPart): Promise<void>; close(): Promise<void> }> };
 type SavePicker = (opts: unknown) => Promise<SaveHandle>;
 
 let handle: { fileName: string; h: SaveHandle } | null = null;
+let desktopPath: { fileName: string; path: string } | null = null;
 
 /** Salva o documento. No Chrome/Edge grava no arquivo escolhido; nos demais, baixa uma cópia. */
 export async function saveDocument(saveAs = false) {
@@ -12,6 +14,15 @@ export async function saveDocument(saveAs = false) {
   if (!s.bytes) return;
   await s.run('Salvando…', async () => {
     const bytes = await s.exportBytes();
+    if (desktop) {
+      const known = desktopPath && desktopPath.fileName === s.fileName && !saveAs ? desktopPath.path : undefined;
+      const saved = await desktop.saveFile(bytes, s.fileName || 'documento.pdf', known);
+      if (!saved) return;
+      desktopPath = { fileName: s.fileName, path: saved };
+      s.markSaved();
+      s.toast('Documento salvo.', 'success');
+      return;
+    }
     const picker = (window as unknown as { showSaveFilePicker?: SavePicker }).showSaveFilePicker;
     if (picker) {
       try {
