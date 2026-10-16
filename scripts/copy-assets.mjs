@@ -29,4 +29,6 @@ for (const lang of ['por', 'eng']) {
   if (!existsSync(src)) throw new Error(`Modelo de OCR ausente: ${src}`);
   copy(src, join(out, 'tessdata', `${lang}.traineddata.gz`));
 }
+// Fontes Liberation (SIL OFL) embutidas no texto adicionado aos PDFs.
+copy(join(root, 'assets', 'fonts'), join(out, 'fonts'));
 console.log('Recursos copiados para public/vendor');

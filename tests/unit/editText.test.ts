@@ -95,3 +95,18 @@ describe('editar texto existente remove o original', () => {
     expect(text).toContain('Linha de baixo');
   });
 });
+
+describe('fontes embutidas no texto novo', () => {
+  it('embute a fonte e preserva acentos, grego e cirílico', async () => {
+    const pdf = fixture('libreoffice-truetype.pdf');
+    const out = await flattenObjects(pdf, [
+      { id: 't', page: 0, kind: 'text', x: 60, y: 200, w: 400, h: 30, text: 'Ação – Ελληνικά Русский €', size: 14,
+        color: '#000000', font: 'Times', bold: true, italic: false, bg: null },
+    ]);
+    expect(pagesText(out)[0]).toContain('Ação – Ελληνικά Русский €');
+    const fonts = execFileSync('pdffonts', [writeTmp(out)], { encoding: 'utf8' });
+    const liberation = fonts.split('\n').find((l) => l.includes('LiberationSerif'));
+    expect(liberation).toBeDefined();
+    expect(liberation).toMatch(/\byes\b/); // embutida
+  });
+});
