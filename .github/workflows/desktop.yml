@@ -28,7 +28,18 @@ jobs:
             -NotAfter (Get-Date).AddDays(2) | Format-List Subject, Thumbprint
 
       - name: Teste da assinatura com certificado do Windows (caminho dos tokens A3)
-        run: npx vitest run tests/unit/wincert.test.ts --reporter=default --reporter=github-actions
+        shell: bash
+        run: |
+          set +e
+          npx vitest run tests/unit/wincert.test.ts > vitest.log 2>&1
+          code=$?
+          cat vitest.log
+          if [ $code -ne 0 ]; then
+            # Mostra o fim da saída como anotação (visível mesmo sem acesso ao log completo).
+            msg=$(tail -n 60 vitest.log | sed 's/\x1b\[[0-9;]*m//g' | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
+            echo "::error title=Teste Windows::$msg"
+          fi
+          exit $code
 
       - run: npm run build
 
