@@ -28,6 +28,7 @@ export async function openPdf(bytes: Uint8Array, password?: string): Promise<PDF
     wasmUrl: base + 'wasm/',
     iccUrl: base + 'iccs/',
     enableXfa: false,
+    fontExtraProperties: true, // nome da fonte (negrito/itálico) para o Conversor
   });
   try {
     return await task.promise;
