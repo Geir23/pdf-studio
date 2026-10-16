@@ -22,6 +22,19 @@ const DIGESTS: Record<string, () => forge.md.MessageDigest> = {
   [forge.pki.oids.sha512]: () => forge.md.sha512.create(),
 };
 
+const HASH_NAMES: Record<string, string> = {
+  [forge.pki.oids.sha1]: 'SHA-1',
+  [forge.pki.oids.sha256]: 'SHA-256',
+  [forge.pki.oids.sha384]: 'SHA-384',
+  [forge.pki.oids.sha512]: 'SHA-512',
+};
+
+function binaryToBytes(s: string): Uint8Array {
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+  return out;
+}
+
 function text(dict: PDFDict, key: string): string {
   const v = dict.lookup(PDFName.of(key));
   return v instanceof PDFString || v instanceof PDFHexString ? v.decodeText() : '';
@@ -58,7 +71,7 @@ export async function verifySignatures(bytes: Uint8Array): Promise<SignatureRepo
       /* data em formato não padrão */
     }
     try {
-      verifyOne(bytes, v, report);
+      await verifyOne(bytes, v, report);
     } catch (e) {
       report.valid = false;
       report.error = e instanceof Error ? e.message : String(e);
@@ -68,7 +81,7 @@ export async function verifySignatures(bytes: Uint8Array): Promise<SignatureRepo
   return reports;
 }
 
-function verifyOne(bytes: Uint8Array, v: PDFDict, report: SignatureReport) {
+async function verifyOne(bytes: Uint8Array, v: PDFDict, report: SignatureReport) {
   const br = v.lookup(PDFName.of('ByteRange'), PDFArray).asArray().map((n) => (n as PDFNumber).asNumber());
   const contents = v.lookup(PDFName.of('Contents'));
   if (br.length !== 4 || !(contents instanceof PDFHexString || contents instanceof PDFString)) {
@@ -112,17 +125,24 @@ function verifyOne(bytes: Uint8Array, v: PDFDict, report: SignatureReport) {
 
   // 2) A assinatura sobre os atributos precisa ser válida para a chave do certificado.
   const attrsSet = asn1.create(asn1.Class.UNIVERSAL, asn1.Type.SET, true, authAttrs.value as forge.asn1.Asn1[]);
-  const attrsMd = makeDigest();
-  attrsMd.update(asn1.toDer(attrsSet).getBytes());
-  const attrsDigest = attrsMd.digest().getBytes();
-  const signature = sigNode.value as string;
-  const cert = msg.certificates.find((crt) => {
+  const attrsDer = binaryToBytes(asn1.toDer(attrsSet).getBytes());
+  const signature = binaryToBytes(sigNode.value as string);
+  const hash = HASH_NAMES[digestOid];
+  // Verificação RSA pela Web Crypto do navegador/Node: a do node-forge aceita
+  // assinaturas malformadas (GHSA-86w9-cpqp-85rv).
+  let cert: forge.pki.Certificate | undefined;
+  for (const crt of msg.certificates) {
     try {
-      return (crt.publicKey as forge.pki.rsa.PublicKey).verify(attrsDigest, signature);
+      const spki = binaryToBytes(asn1.toDer(forge.pki.publicKeyToAsn1(crt.publicKey)).getBytes());
+      const key = await crypto.subtle.importKey('spki', spki as BufferSource, { name: 'RSASSA-PKCS1-v1_5', hash }, false, ['verify']);
+      if (await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, signature as BufferSource, attrsDer as BufferSource)) {
+        cert = crt;
+        break;
+      }
     } catch {
-      return false;
+      /* chave não RSA ou certificado ilegível */
     }
-  });
+  }
   if (!cert) throw new Error('A assinatura não confere com o certificado (ou usa algoritmo não suportado).');
   const cn = (n: forge.pki.Certificate['subject']) => (n.getField('CN')?.value as string | undefined) ?? '';
   report.signer = cn(cert.subject) || report.signer;

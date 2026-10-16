@@ -189,3 +189,24 @@ describe('verificação de assinaturas', () => {
     expect(reports.map((r) => [r.valid, r.coversWholeDocument])).toEqual([[true, false], [true, true]]);
   });
 });
+
+describe('assinatura forjada', () => {
+  it('rejeita quando os bytes da assinatura RSA são alterados', async () => {
+    const { verifySignatures } = await import('../../src/pdf/verify');
+    const p12 = await generateTestCertificate('Forja Teste', '', 'x');
+    const signed = await signDigitally(await samplePdf(1), {
+      p12, passphrase: 'x', page: 0, box: null, reason: '', location: '', contact: '', imageDataUrl: null,
+    });
+    const s = Buffer.from(signed).toString('latin1');
+    const start = s.indexOf('/Contents <') + '/Contents <'.length;
+    const end = s.indexOf('>', start);
+    const hex = s.slice(start, end).replace(/(00)+$/, '');
+    // O fim do PKCS#7 é o valor da assinatura RSA: troca um dígito dele.
+    const pos = start + hex.length - 10;
+    const forged = signed.slice();
+    forged[pos] = forged[pos] === 0x30 ? 0x31 : 0x30;
+    const [r] = await verifySignatures(forged);
+    expect(r.valid).toBe(false);
+    expect(r.error).toMatch(/não confere/);
+  });
+});
