@@ -351,6 +351,30 @@ async function main() {
     check('cria link', uris.includes('https://www.exemplo.com.br'), uris.join(', '));
     check('cria marcador', fdoc.catalog.lookup(PDFName.of('Outlines')) !== undefined);
 
+    // Exportar Excel e PDF/A
+    await open(join(process.cwd(), 'tests', 'fixtures', 'libreoffice-tabela.pdf'));
+    await tool('Exportar para Excel');
+    dl = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Exportar', exact: true }).click();
+    const xlsx = join(OUT, 'tabela.xlsx');
+    await (await dl).saveAs(xlsx);
+    execFileSync('soffice', ['--headless', '--convert-to', 'csv', '--outdir', OUT, xlsx], { timeout: 120000 });
+    const csv = readFileSync(join(OUT, 'tabela.csv'), 'utf8');
+    check('exporta tabela para Excel', csv.includes('Caderno universitário,45,987'), csv.split('\n')[2]);
+    await tool('Salvar como PDF/A');
+    await page.locator('.modal .result.ok').waitFor();
+    dl = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Gerar PDF/A-2b' }).click();
+    const pdfa = join(OUT, 'tabela-pdfa.pdf');
+    await (await dl).saveAs(pdfa);
+    if (process.env.VERAPDF_LIB) {
+      let vr = '';
+      try {
+        vr = execFileSync('java', ['-cp', `${process.env.VERAPDF_LIB}/*`, 'org.verapdf.apps.GreenfieldCliWrapper', '--format', 'text', pdfa], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      } catch (e) { vr = String(e.stdout ?? e); }
+      check('PDF/A aprovado no veraPDF', /^PASS/m.test(vr), vr.split('\n')[0]);
+    }
+
     // Comparar com a versão editada
     await open(join(OUT, 'contrato.pdf'));
     await tool('Comparar arquivos');

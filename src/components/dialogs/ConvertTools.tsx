@@ -5,12 +5,14 @@ import { pickFiles } from '../../lib/files';
 import { readPdfFile } from '../../lib/openFlow';
 import { compareDocuments, type PageDiff } from '../../pdf/compare';
 import { imagesToPdf, pdfToDocx, pdfToImages, pdfToText } from '../../pdf/convert';
+import { pdfToXlsx } from '../../pdf/excel';
+import { convertToPdfa, preflightPdfa, type PdfaPreflight } from '../../pdf/pdfa';
 import { openPdf } from '../../pdf/pdfjs';
 import { useStore } from '../../store';
 import { Field, Modal } from '../ui';
 import { PagesField, close, resolvePages } from './common';
 
-export function ConvertDialog({ initial = 'docx' }: { initial?: 'docx' | 'images' | 'text' }) {
+export function ConvertDialog({ initial = 'docx' }: { initial?: 'docx' | 'xlsx' | 'images' | 'text' }) {
   const fileName = useStore((s) => s.fileName);
   const n = useStore((s) => s.pageSizes.length);
   const [format, setFormat] = useState(initial);
@@ -28,6 +30,8 @@ export function ConvertDialog({ initial = 'docx' }: { initial?: 'docx' | 'images
       try {
         if (format === 'docx') {
           download(await pdfToDocx(view, progress), `${base}.docx`);
+        } else if (format === 'xlsx') {
+          download(await pdfToXlsx(view, progress), `${base}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         } else if (format === 'text') {
           download(new Blob([await pdfToText(view, progress)], { type: 'text/plain;charset=utf-8' }), `${base}.txt`);
         } else {
@@ -44,11 +48,15 @@ export function ConvertDialog({ initial = 'docx' }: { initial?: 'docx' | 'images
     <Modal title="Exportar PDF" onClose={close} footer={<button className="primary" onClick={run}>Exportar</button>}>
       <div className="segmented">
         <button className={format === 'docx' ? 'active' : ''} onClick={() => setFormat('docx')}>Word (.docx)</button>
+        <button className={format === 'xlsx' ? 'active' : ''} onClick={() => setFormat('xlsx')}>Excel (.xlsx)</button>
         <button className={format === 'images' ? 'active' : ''} onClick={() => setFormat('images')}>Imagens</button>
         <button className={format === 'text' ? 'active' : ''} onClick={() => setFormat('text')}>Texto (.txt)</button>
       </div>
       {format === 'docx' && (
         <p className="hint">Gera um documento do Word com o texto de cada página, preservando parágrafos e quebras de página. Layouts complexos (colunas, tabelas) são simplificados. Páginas escaneadas entram como imagem; rode o OCR antes para obter texto editável.</p>
+      )}
+      {format === 'xlsx' && (
+        <p className="hint">Reconstrói tabelas a partir da posição do texto: uma planilha por página, com números (ex.: 1.234,50) convertidos em valores de verdade. Para documentos escaneados, rode o OCR antes.</p>
       )}
       {format === 'text' && <p className="hint">Extrai todo o texto do documento, página por página.</p>}
       {format === 'images' && (
@@ -205,6 +213,43 @@ export function CompareDialog() {
           </div>
         </>
       )}
+    </Modal>
+  );
+}
+
+export function PdfaDialog() {
+  const fileName = useStore((s) => s.fileName);
+  const security = useStore((s) => !!s.security);
+  const [pre, setPre] = useState<PdfaPreflight | null>(null);
+  const s = useStore.getState;
+
+  useEffect(() => {
+    void s().run('Verificando o documento…', async () => setPre(await preflightPdfa(await s().bake())));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const run = () =>
+    s().run('Gerando PDF/A…', async () => {
+      const out = await convertToPdfa(await s().bake(), baseName(fileName));
+      download(out, `${baseName(fileName)}-pdfa.pdf`);
+      s().toast('PDF/A gerado.', 'success');
+      close();
+    });
+
+  const ok = pre && !pre.missingFonts.length && !pre.hasForm;
+  return (
+    <Modal title="Salvar como PDF/A (arquivamento)" onClose={close} footer={<button className="primary" onClick={run} disabled={!pre}>Gerar PDF/A-2b</button>}>
+      <p className="hint">PDF/A é o padrão ISO para guarda de longo prazo, exigido por vários órgãos públicos e tribunais. Gera uma cópia; o documento aberto não muda.</p>
+      {!pre && <p className="hint">Verificando…</p>}
+      {ok && <p className="result ok">Nenhum impedimento encontrado: o arquivo deve passar na validação PDF/A-2b.</p>}
+      {pre && pre.missingFonts.length > 0 && (
+        <p className="warn">
+          Fontes não embutidas: {pre.missingFonts.join(', ')}. O PDF/A exige fontes embutidas; o resultado provavelmente
+          não passará na validação. Alternativa: Comprimir (converte as páginas em imagem) e depois OCR.
+        </p>
+      )}
+      {pre?.hasForm && <p className="warn">O documento tem campos de formulário. Achate o formulário antes (Ferramentas › Achatar formulário) para garantir a conformidade.</p>}
+      {security && <p className="warn">A proteção por senha não é aplicada ao PDF/A (o padrão não permite criptografia).</p>}
     </Modal>
   );
 }

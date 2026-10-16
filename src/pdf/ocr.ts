@@ -1,7 +1,6 @@
 import { createWorker, OEM } from 'tesseract.js';
 import {
   PDFDocument,
-  StandardFonts,
   TextRenderingMode,
   degrees,
   popGraphicsState,
@@ -9,7 +8,7 @@ import {
   setTextRenderingMode,
 } from 'pdf-lib';
 import { pageGeom, toPdf } from './coords';
-import { safeText } from './fonts';
+import { FontCache, safeText } from './fonts';
 import { assetUrl, type PDFDocumentProxy } from './pdfjs';
 import { renderPageToCanvas } from './render';
 
@@ -49,7 +48,8 @@ export async function createOcrWorker(langs: string, onLog?: (status: string, p:
 /** Reconhece o texto das páginas e o grava como camada invisível, tornando o PDF pesquisável. */
 export async function ocrDocument(bytes: Uint8Array, view: PDFDocumentProxy, opt: OcrOptions): Promise<OcrResult> {
   const doc = await PDFDocument.load(bytes);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+  // Fonte embutida: mantém o PDF apto a PDF/A e preserva acentos e outros alfabetos.
+  const font = await new FontCache(doc).get('Helvetica');
   const result: OcrResult = { bytes, text: [], processed: [], skipped: [] };
   const total = opt.pages.length;
   let current = 0;

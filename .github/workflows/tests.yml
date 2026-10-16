@@ -1,0 +1,26 @@
+name: Testes
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Ferramentas usadas pelos testes (poppler)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Validador PDF/A (veraPDF)
+        run: |
+          mvn -q -f .github/verapdf/pom.xml dependency:copy-dependencies -DoutputDirectory="$RUNNER_TEMP/verapdf"
+          echo "VERAPDF_LIB=$RUNNER_TEMP/verapdf" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

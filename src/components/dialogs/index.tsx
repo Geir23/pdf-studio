@@ -1,13 +1,13 @@
 import {
   Combine, Crop, FileArchive, FileDown, FileImage, FileLock2, FileOutput, FileScan, FileSearch, FileSignature,
-  FileText, Images, Info, Printer, ScissorsLineDashed, Stamp, Hash, Layers3, Signature, SquareDashed,
+  FileText, Images, Sheet, Archive, Info, Printer, ScissorsLineDashed, Stamp, Hash, Layers3, Signature, SquareDashed,
 } from 'lucide-react';
 import { printDocument } from '../../lib/actions';
 import { flattenForm } from '../../pdf/tools';
 import { useStore } from '../../store';
 import { Modal } from '../ui';
 import { close } from './common';
-import { CompareDialog, ConvertDialog, ImagesToPdfDialog } from './ConvertTools';
+import { CompareDialog, ConvertDialog, ImagesToPdfDialog, PdfaDialog } from './ConvertTools';
 import { CompressDialog, HeaderFooterDialog, OcrDialog, PropertiesDialog, ProtectDialog, WatermarkDialog } from './DocTools';
 import { CropDialog, ExtractDialog, MergeDialog, SplitDialog } from './PageTools';
 import { DigitalSignDialog, SignatureDialog } from './SignTools';
@@ -58,6 +58,8 @@ const GROUPS: { title: string; tools: ToolCard[] }[] = [
     title: 'Exportar e otimizar',
     tools: [
       { id: 'convert:docx', label: 'Exportar para Word', desc: '.docx editável', icon: FileText, needsDoc: true },
+      { id: 'convert:xlsx', label: 'Exportar para Excel', desc: 'Tabelas em .xlsx', icon: Sheet, needsDoc: true },
+      { id: 'pdfa', label: 'Salvar como PDF/A', desc: 'Arquivamento (ISO 19005)', icon: Archive, needsDoc: true },
       { id: 'convert:images', label: 'Exportar imagens', desc: 'PNG ou JPG por página', icon: FileImage, needsDoc: true },
       { id: 'convert:text', label: 'Exportar texto', desc: 'Arquivo .txt', icon: FileDown, needsDoc: true },
       { id: 'compress', label: 'Comprimir', desc: 'Reduza o tamanho do arquivo', icon: FileArchive, needsDoc: true },
@@ -109,6 +111,7 @@ export function DialogHost() {
     case 'properties': return <PropertiesDialog />;
     case 'images': return <ImagesToPdfDialog />;
     case 'compare': return <CompareDialog />;
+    case 'pdfa': return <PdfaDialog />;
     case 'signature': return <SignatureDialog />;
     case 'digitalSign': return <DigitalSignDialog />;
     default: return null;
