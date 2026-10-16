@@ -58,6 +58,18 @@ try {
   await win.locator('.ocr-text').waitFor({ timeout: 180000 });
   check('OCR funciona no desktop', /Relat.rio anual/i.test(await win.locator('.ocr-text').inputValue()));
   await win.screenshot({ path: join(OUT, '08-desktop.png') });
+
+  // Conversor no desktop: PDF escaneado → Markdown
+  await win.getByRole('button', { name: 'Concluir' }).click();
+  await win.getByRole('tab', { name: 'Conversor' }).click();
+  const ch = win.waitForEvent('filechooser');
+  await win.locator('.conv-drop').click();
+  await (await ch).setFiles(join(process.cwd(), 'tests', 'fixtures', 'convert', 'relatorio-escaneado.pdf'));
+  await win.getByRole('button', { name: 'Converter', exact: true }).click();
+  await win.locator('.conv-jobs li.pronto, .conv-jobs li.erro').first().waitFor({ timeout: 300000 });
+  await win.getByRole('button', { name: 'Markdown', exact: true }).click();
+  const md = await win.locator('.md-source').inputValue().catch(() => '');
+  check('Conversor funciona no desktop (escaneado → Markdown)', md.includes('## Objetivos') && /\| [Ss]ul \| 1\.250 \|/.test(md));
   check('sem erros no console', errors.length === 0, errors.slice(0, 3).join(' | '));
 } catch (e) {
   console.error('ERRO:', e.message.split('\n')[0]);

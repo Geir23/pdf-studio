@@ -1,6 +1,6 @@
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
-import type { PageData, Rect, TextPiece } from './types';
+import { safeUrl, type PageData, type Rect, type TextPiece } from './types';
 
 // Códigos de operação do pdf.js (estáveis entre versões; ver OPS em pdf.mjs).
 const OP = { save: 10, restore: 11, transform: 12, paintImageMaskXObject: 83, paintImageXObject: 85, paintInlineImageXObject: 86 } as const;
@@ -74,7 +74,7 @@ export async function extractPage(doc: PDFDocumentProxy, index: number): Promise
 
   const links: PageData['links'] = [];
   for (const a of await page.getAnnotations()) {
-    if (a.subtype !== 'Link' || !a.url) continue;
+    if (a.subtype !== 'Link' || !safeUrl(a.url)) continue;
     const [x1, y1] = vp.convertToViewportPoint(a.rect[0], a.rect[1]);
     const [x2, y2] = vp.convertToViewportPoint(a.rect[2], a.rect[3]);
     links.push({ rect: { x: Math.min(x1, x2), y: Math.min(y1, y2), w: Math.abs(x2 - x1), h: Math.abs(y2 - y1) }, url: a.url });

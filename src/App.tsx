@@ -1,6 +1,7 @@
-import { Combine, FilePlus2, FolderOpen, Images, ShieldCheck, Upload } from 'lucide-react';
+import { Combine, FilePlus2, FolderOpen, Images, ScanText, ShieldCheck, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PDFDocument, PageSizes } from 'pdf-lib';
+import { Converter } from './components/Converter';
 import { DialogHost } from './components/dialogs';
 import { finishEditing } from './components/Overlay';
 import { Properties } from './components/Properties';
@@ -28,6 +29,7 @@ function Welcome() {
         </button>
       </div>
       <div className="quick">
+        <button className="highlight" onClick={() => s().setMode('converter')}><ScanText size={22} /> Converter para Markdown, Word… (com OCR)</button>
         <button onClick={() => s().openDialog('merge')}><Combine size={22} /> Combinar PDFs</button>
         <button onClick={() => s().openDialog('images')}><Images size={22} /> Imagens para PDF</button>
         <button onClick={() => s().run('Criando…', async () => {
@@ -91,6 +93,7 @@ function isTyping(e: KeyboardEvent) {
 
 export default function App() {
   const hasDoc = useStore((s) => !!s.bytes);
+  const mode = useStore((s) => s.mode);
   const [panel, setPanel] = useState<Panel | null>('pages');
   const [dragOver, setDragOver] = useState(false);
 
@@ -98,7 +101,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const s = useStore.getState();
       const mod = e.ctrlKey || e.metaKey;
-      if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); void saveDocument(e.shiftKey); return; }
+      if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); if (s.mode === 'editor') void saveDocument(e.shiftKey); return; }
       if (mod && e.key.toLowerCase() === 'o') { e.preventDefault(); void pickFiles('application/pdf,.pdf').then(([f]) => f && openFile(f)); return; }
       if (mod && e.key.toLowerCase() === 'p' && s.bytes) { e.preventDefault(); void printDocument(); return; }
       if (mod && e.key.toLowerCase() === 'f' && s.bytes) { e.preventDefault(); setPanel('search'); return; }
@@ -126,7 +129,7 @@ export default function App() {
       if (e.key === 'PageDown') { s.goToPage(s.currentPage + 1); return; }
       if (e.key === 'PageUp') { s.goToPage(s.currentPage - 1); return; }
       const tool = TOOL_KEYS[e.key.toLowerCase()];
-      if (tool && s.bytes) s.setTool(tool);
+      if (tool && s.bytes && s.mode === 'editor') s.setTool(tool);
     };
     const onUnload = (e: BeforeUnloadEvent) => {
       // No desktop quem pergunta é a janela nativa (ver electron/main.cjs).
@@ -148,10 +151,10 @@ export default function App() {
   return (
     <div
       className="app"
-      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); } }}
+      onDragOver={(e) => { if (mode === 'editor' && e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragOver(true); } }}
       onDragLeave={(e) => { if (e.currentTarget === e.target) setDragOver(false); }}
       onDrop={(e) => {
-        if (!e.dataTransfer.files.length) return;
+        if (mode !== 'editor' || !e.dataTransfer.files.length) return;
         e.preventDefault();
         setDragOver(false);
         const f = Array.from(e.dataTransfer.files).find((x) => x.type === 'application/pdf' || x.name.toLowerCase().endsWith('.pdf'));
@@ -160,9 +163,11 @@ export default function App() {
       }}
     >
       <TopBar />
-      {hasDoc && <EditBar />}
+      {hasDoc && mode === 'editor' && <EditBar />}
       <main>
-        {hasDoc ? (
+        {mode === 'converter' ? (
+          <Converter />
+        ) : hasDoc ? (
           <>
             <Sidebar panel={panel} setPanel={setPanel} />
             <Viewer />

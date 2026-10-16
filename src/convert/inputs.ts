@@ -1,7 +1,7 @@
 // Entradas além do PDF: imagens, Word (.docx), HTML, Markdown e texto.
 import { marked, type Token, type Tokens } from 'marked';
 import { PDFDocument } from 'pdf-lib';
-import type { Block, Inline } from './types';
+import { safeUrl, type Block, type Inline } from './types';
 
 export type InputKind = 'pdf' | 'image' | 'docx' | 'html' | 'markdown' | 'text';
 
@@ -79,7 +79,7 @@ function inlineTokens(tokens: Token[] | undefined, fmt: Omit<Inline, 'text'> = {
     switch (t.type) {
       case 'strong': out.push(...inlineTokens((t as Tokens.Strong).tokens, { ...fmt, bold: true })); break;
       case 'em': out.push(...inlineTokens((t as Tokens.Em).tokens, { ...fmt, italic: true })); break;
-      case 'link': out.push(...inlineTokens((t as Tokens.Link).tokens, { ...fmt, link: (t as Tokens.Link).href })); break;
+      case 'link': out.push(...inlineTokens((t as Tokens.Link).tokens, { ...fmt, link: safeUrl((t as Tokens.Link).href) })); break;
       case 'codespan': out.push({ ...fmt, text: (t as Tokens.Codespan).text }); break;
       case 'br': out.push({ ...fmt, text: ' ' }); break;
       case 'text': {

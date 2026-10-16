@@ -177,3 +177,17 @@ describe('regras de layout', () => {
     expect(out.trim()).toBe('\\# não é título: \\*asterisco\\* e \\[colchete\\] fim do parágrafo.');
   });
 });
+
+describe('segurança', () => {
+  it('não gera links javascript: vindos do arquivo', async () => {
+    const { markdownToBlocks } = await import('../../src/convert/inputs');
+    const blocks = markdownToBlocks('[clique](javascript:alert(1)) e [site](https://ok.com) <script>alert(1)</script>');
+    const out = blocksToMarkdown(blocks, { imageDir: null });
+    expect(out).not.toContain('javascript:');
+    expect(out).toContain('[site](https://ok.com)');
+    const { marked } = await import('marked');
+    const html = marked.parse(out, { async: false }) as string;
+    expect(html).not.toMatch(/<script/i); // vira texto: &lt;script&gt;
+    expect(html).toContain('&lt;script&gt;');
+  });
+});

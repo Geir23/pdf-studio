@@ -19,6 +19,7 @@ export function TopBar() {
   const total = useStore((s) => s.pageSizes.length);
   const hasDoc = useStore((s) => !!s.bytes);
   const security = useStore((s) => !!s.security);
+  const mode = useStore((s) => s.mode);
   const s = useStore.getState;
   const [pageInput, setPageInput] = useState('1');
   useEffect(() => setPageInput(String(current + 1)), [current]);
@@ -34,17 +35,25 @@ export function TopBar() {
       <div className="brand">
         <span className="logo">PDF</span> Studio
       </div>
-      <button title="Abrir (Ctrl+O)" onClick={async () => { const [f] = await pickFiles('application/pdf,.pdf'); if (f) await openFile(f); }}>
+      <div className="segmented mode-switch" role="tablist" aria-label="Tela">
+        <button role="tab" aria-selected={mode === 'editor'} className={mode === 'editor' ? 'active' : ''} onClick={() => s().setMode('editor')}>Editor</button>
+        <button role="tab" aria-selected={mode === 'converter'} className={mode === 'converter' ? 'active' : ''} onClick={() => s().setMode('converter')}>Conversor</button>
+      </div>
+      <button title="Abrir no editor (Ctrl+O)" onClick={async () => { const [f] = await pickFiles('application/pdf,.pdf'); if (f) { s().setMode('editor'); await openFile(f); } }}>
         <FolderOpen size={18} /> <span className="label">Abrir</span>
       </button>
-      <button title="Salvar (Ctrl+S)" disabled={!hasDoc} onClick={() => saveDocument()}>
-        <Save size={18} /> <span className="label">Salvar</span>
-      </button>
-      <button className="icon" title="Imprimir (Ctrl+P)" disabled={!hasDoc} onClick={printDocument}><Printer size={18} /></button>
-      <span className="sep" />
-      <button className="icon" title="Desfazer (Ctrl+Z)" disabled={!canUndo} onClick={() => s().undo()}><Undo2 size={18} /></button>
-      <button className="icon" title="Refazer (Ctrl+Y)" disabled={!canRedo} onClick={() => s().redo()}><Redo2 size={18} /></button>
-      {hasDoc && (
+      {mode === 'editor' && (
+        <>
+        <button title="Salvar (Ctrl+S)" disabled={!hasDoc} onClick={() => saveDocument()}>
+          <Save size={18} /> <span className="label">Salvar</span>
+        </button>
+        <button className="icon" title="Imprimir (Ctrl+P)" disabled={!hasDoc} onClick={printDocument}><Printer size={18} /></button>
+        <span className="sep" />
+        <button className="icon" title="Desfazer (Ctrl+Z)" disabled={!canUndo} onClick={() => s().undo()}><Undo2 size={18} /></button>
+        <button className="icon" title="Refazer (Ctrl+Y)" disabled={!canRedo} onClick={() => s().redo()}><Redo2 size={18} /></button>
+        </>
+      )}
+      {hasDoc && mode === 'editor' && (
         <>
           <span className="sep" />
           <div className="pager">
@@ -73,7 +82,7 @@ export function TopBar() {
         </>
       )}
       <div className="spacer" />
-      {hasDoc && (
+      {hasDoc && mode === 'editor' && (
         <span className="doc-name" title={fileName}>
           {security && '🔒 '}
           {fileName}

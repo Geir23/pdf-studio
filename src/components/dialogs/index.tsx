@@ -1,10 +1,11 @@
 import {
   Combine, Crop, FileArchive, FileDown, FileImage, FileLock2, FileOutput, FileScan, FileSearch, FileSignature,
-  FileText, Images, Sheet, Archive, Info, Printer, ScissorsLineDashed, Stamp, Hash, Layers3, Signature, SquareDashed,
+  FileText, Images, Sheet, Archive, ScanText, Info, Printer, ScissorsLineDashed, Stamp, Hash, Layers3, Signature, SquareDashed,
 } from 'lucide-react';
 import { printDocument } from '../../lib/actions';
 import { flattenForm } from '../../pdf/tools';
 import { useStore } from '../../store';
+import { converterInbox } from '../Converter';
 import { Modal } from '../ui';
 import { close } from './common';
 import { CompareDialog, ConvertDialog, ImagesToPdfDialog, PdfaDialog } from './ConvertTools';
@@ -57,6 +58,16 @@ const GROUPS: { title: string; tools: ToolCard[] }[] = [
   {
     title: 'Exportar e otimizar',
     tools: [
+      { id: 'converter', label: 'Converter (Markdown, Word… com OCR)', desc: 'Estrutura completa, até de digitalizações', icon: ScanText, needsDoc: false,
+        action: () => {
+          const s = useStore.getState();
+          close();
+          if (!s.bytes) return s.setMode('converter');
+          void s.run('Preparando…', async () => {
+            converterInbox.push({ name: s.fileName || 'documento.pdf', bytes: await s.bake() });
+            s.setMode('converter');
+          });
+        } },
       { id: 'convert:docx', label: 'Exportar para Word', desc: '.docx editável', icon: FileText, needsDoc: true },
       { id: 'convert:xlsx', label: 'Exportar para Excel', desc: 'Tabelas em .xlsx', icon: Sheet, needsDoc: true },
       { id: 'pdfa', label: 'Salvar como PDF/A', desc: 'Arquivamento (ISO 19005)', icon: Archive, needsDoc: true },

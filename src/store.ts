@@ -91,6 +91,8 @@ interface State {
   searchHighlight: { page: number; query: string } | null;
   scrollRequest: { page: number; nonce: number } | null;
   dialog: string | null;
+  /** Tela principal: editor de PDF ou Conversor. */
+  mode: 'editor' | 'converter';
   busy: Busy | null;
   toasts: Toast[];
 }
@@ -125,6 +127,7 @@ interface Actions {
   setPendingDigitalBox(v: { page: number; box: Box } | null): void;
   setSearchHighlight(v: { page: number; query: string } | null): void;
   openDialog(name: string | null): void;
+  setMode(mode: 'editor' | 'converter'): void;
   setBusy(message: string | null, progress?: number | null): void;
   toast(text: string, kind?: Toast['kind']): void;
   dismissToast(id: number): void;
@@ -238,6 +241,7 @@ export const useStore = create<Store>((set, get) => {
     searchHighlight: null,
     scrollRequest: null,
     dialog: null,
+    mode: 'editor',
     busy: null,
     toasts: [],
 
@@ -382,6 +386,9 @@ export const useStore = create<Store>((set, get) => {
     },
     setSearchHighlight(searchHighlight) {
       set({ searchHighlight });
+    },
+    setMode(mode) {
+      set({ mode, dialog: null });
     },
     openDialog(dialog) {
       set({ dialog });

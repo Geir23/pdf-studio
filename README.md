@@ -31,6 +31,14 @@ computador**: todo o processamento (edição, OCR, assinatura) acontece localmen
 - Criar links para sites, e-mails ou páginas do documento; links existentes são clicáveis
 - Adicionar, renomear, reordenar e excluir marcadores (sumário)
 
+**Conversor (Markdown, Word, HTML… com OCR)**
+- Converte PDF, imagens (JPG, PNG, WebP…), Word, HTML e texto, vários de uma vez
+- Saídas: Markdown, Markdown + imagens (.zip), HTML, Word, texto e JSON estruturado
+- Mantém títulos, parágrafos, negrito/itálico, listas, tabelas, links, imagens e a ordem de leitura em duas colunas
+- Remove cabeçalhos, rodapés e números de página repetidos; une palavras hifenizadas
+- **OCR automático** onde o PDF não tem texto confiável: páginas escaneadas, texto que "não dá para copiar"
+  (fontes sem mapa Unicode) e texto dentro de imagens; apaga bordas de tabela antes do OCR para ler as células
+
 **Ferramentas**
 - **OCR** (português e inglês) para tornar documentos escaneados pesquisáveis
 - Marca d'água, cabeçalho/rodapé e numeração de páginas
@@ -79,6 +87,7 @@ npm run desktop:win   # gera o instalador (em um computador com Windows)
 ```bash
 npm test           # testes do núcleo (precisa do poppler-utils: pdftotext, pdfsig)
 npm run build && npm run test:e2e   # testes no Chromium, clicando como um usuário
+npm run test:converter               # Conversor no Chromium (lote com PDF, escaneado, imagem e Word)
 xvfb-run -a npm run test:desktop     # app desktop (Electron); rode depois do test:e2e
 ```
 
@@ -120,6 +129,9 @@ criptografia), [Tesseract.js](https://github.com/naptha/tesseract.js) (OCR),
   ICP-Brasil. No navegador, só certificados A1 em arquivo; A3 apenas no app desktop para Windows.
 - **Exportar para Word/Excel**: preserva texto, parágrafos e tabelas simples; layouts
   complexos são simplificados.
+- **Conversor**: o OCR pode errar em letras pequenas, borradas ou manuscritas; o app avisa quando
+  usou OCR. Negrito e itálico não são detectados em páginas reconhecidas por OCR. Layouts muito
+  complexos (revistas, formulários) podem sair com a ordem de leitura simplificada.
 - **PDF/A**: documentos com fontes não embutidas ou campos de formulário não passam na
   validação; o app avisa antes de gerar.
 - O app desktop não tem assinatura de código paga; o Windows pode exibir um aviso na

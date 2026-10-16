@@ -58,3 +58,9 @@ export interface ConvertedDocument {
 }
 
 export const inlineText = (c: Inline[]) => c.map((i) => i.text).join('');
+
+/** Só endereços seguros viram link (bloqueia javascript:, data: etc. vindos do arquivo). */
+export function safeUrl(url: string | undefined): string | undefined {
+  const u = url?.trim();
+  return u && /^(https?:\/\/|mailto:)/i.test(u) ? u : undefined;
+}
