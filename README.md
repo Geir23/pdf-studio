@@ -26,13 +26,19 @@ computador**: todo o processamento (edição, OCR, assinatura) acontece localmen
 - Reordenar arrastando, girar, excluir, duplicar, inserir em branco, inserir outro PDF
 - Extrair, dividir (a cada N páginas, por intervalos), combinar vários PDFs, cortar margens
 
+**Formulários, links e marcadores**
+- Criar campos: texto, várias linhas, caixa de seleção, botão de opção, lista suspensa e campo de assinatura
+- Criar links para sites, e-mails ou páginas do documento; links existentes são clicáveis
+- Adicionar, renomear, reordenar e excluir marcadores (sumário)
+
 **Ferramentas**
 - **OCR** (português e inglês) para tornar documentos escaneados pesquisáveis
 - Marca d'água, cabeçalho/rodapé e numeração de páginas
 - Preencher formulários (e achatar)
 - Comprimir (sem perdas ou convertendo em imagem)
 - Proteger com senha (AES-256) e permissões
-- Exportar para Word (.docx), imagens (PNG/JPG) e texto
+- Exportar para Word (.docx), **Excel (.xlsx, tabelas reconstruídas)**, imagens (PNG/JPG) e texto
+- **Salvar como PDF/A-2b** para arquivamento (validado com o veraPDF)
 - Imagens → PDF
 - Comparar duas versões (diferenças de texto por página)
 - Propriedades/metadados, impressão
@@ -40,7 +46,8 @@ computador**: todo o processamento (edição, OCR, assinatura) acontece localmen
 **Assinar**
 - Assinatura eletrônica: desenhar, digitar ou usar imagem (remove o fundo branco); fica
   salva para reutilizar
-- **Assinatura digital** com certificado A1 (.pfx/.p12), padrão PKCS#7
+- **Assinatura digital** com certificado A1 (.pfx/.p12) ou, no app desktop para Windows,
+  com certificados instalados no Windows, incluindo **tokens e cartões A3** (o Windows pede o PIN), padrão PKCS#7
   (`adbe.pkcs7.detached`), com aparência visível. Salva de forma incremental, então
   várias assinaturas no mesmo documento continuam válidas
 - Verificação das assinaturas do documento (integridade criptográfica)
@@ -57,12 +64,26 @@ npm run build      # gera a versão final em dist/
 npm run preview    # serve a pasta dist/
 ```
 
+## App desktop (Windows)
+
+Cada envio para a branch `main` gera, no GitHub Actions, um instalador e uma versão portátil,
+publicados na página **Releases** do repositório. Para rodar o app desktop a partir do código:
+
+```bash
+npm run desktop       # abre o app no Electron
+npm run desktop:win   # gera o instalador (em um computador com Windows)
+```
+
 ## Testes
 
 ```bash
 npm test           # testes do núcleo (precisa do poppler-utils: pdftotext, pdfsig)
 npm run build && npm run test:e2e   # testes no Chromium, clicando como um usuário
+xvfb-run -a npm run test:desktop     # app desktop (Electron); rode depois do test:e2e
 ```
+
+Para validar o PDF/A com o veraPDF, defina `VERAPDF_LIB` com a pasta dos `.jar`
+(veja `.github/verapdf/pom.xml`).
 
 Os testes conferem os PDFs gerados com ferramentas independentes (poppler): texto
 extraído, rotação, criptografia e validade das assinaturas digitais.
@@ -91,14 +112,15 @@ criptografia), [Tesseract.js](https://github.com/naptha/tesseract.js) (OCR),
 
 ## Limitações conhecidas
 
-- **Editar texto existente** usa as fontes padrão do PDF (Helvetica, Times, Courier) para
-  o texto novo, que pode não ser idêntico à fonte original. Caracteres fora do alfabeto
-  latino (ex.: chinês, cirílico) no texto *novo* viram "?". Texto dentro de objetos de
-  formulário (XObjects) é apenas coberto, não removido.
-- **Assinatura digital**: só certificados A1 em arquivo. Tokens e cartões A3 não são
-  acessíveis pelo navegador (ficam para a versão desktop). Ainda não há carimbo de tempo
-  (TSA) nem validação da cadeia ICP-Brasil.
-- **Exportar para Word** preserva o texto e as quebras de página; colunas e tabelas são
-  simplificadas.
-- Ainda não implementado: criar campos de formulário, editar marcadores e links,
-  conversão para PDF/A, exportar para Excel/PowerPoint.
+- **Editar texto existente**: o texto novo usa as fontes Liberation (mesmas medidas de Arial,
+  Times e Courier), que podem não ser idênticas à fonte original. Caracteres sem suporte
+  nelas (ex.: chinês) viram "?". Texto dentro de objetos de formulário (XObjects) é apenas
+  coberto, não removido.
+- **Assinatura digital**: ainda não há carimbo de tempo (TSA) nem validação da cadeia
+  ICP-Brasil. No navegador, só certificados A1 em arquivo; A3 apenas no app desktop para Windows.
+- **Exportar para Word/Excel**: preserva texto, parágrafos e tabelas simples; layouts
+  complexos são simplificados.
+- **PDF/A**: documentos com fontes não embutidas ou campos de formulário não passam na
+  validação; o app avisa antes de gerar.
+- O app desktop não tem assinatura de código paga; o Windows pode exibir um aviso na
+  primeira execução ("Mais informações" › "Executar assim mesmo").
