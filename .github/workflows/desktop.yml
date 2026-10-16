@@ -28,7 +28,7 @@ jobs:
             -NotAfter (Get-Date).AddDays(2) | Format-List Subject, Thumbprint
 
       - name: Teste da assinatura com certificado do Windows (caminho dos tokens A3)
-        run: npx vitest run tests/unit/wincert.test.ts
+        run: npx vitest run tests/unit/wincert.test.ts --reporter=default --reporter=github-actions
 
       - run: npm run build
 
