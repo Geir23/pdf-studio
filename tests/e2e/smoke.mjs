@@ -46,6 +46,9 @@ async function main() {
   await fixtures();
   // E2E_DEV=1 testa o servidor de desenvolvimento em vez do build de produção.
   const mode = process.env.E2E_DEV ? [] : ['preview'];
+  // E2E_BASE=/pdf-studio/ testa o build publicado num subcaminho (como no GitHub Pages).
+  const BASE = process.env.E2E_BASE ?? '/';
+  if (BASE !== '/') mode.push('--base', BASE);
   const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', ...mode, '--port', String(PORT), '--strictPort'], { stdio: 'pipe' });
   await new Promise((resolve, reject) => {
     server.stdout.on('data', (d) => String(d).includes(String(PORT)) && resolve());
@@ -64,7 +67,7 @@ async function main() {
   page.on('response', (r) => r.status() >= 400 && errors.push(`HTTP ${r.status()} ${r.url()}`));
 
   try {
-    await page.goto(`http://localhost:${PORT}/`);
+    await page.goto(`http://localhost:${PORT}${BASE}`);
     await page.screenshot({ path: join(OUT, '01-inicio.png') });
 
     // Abrir
