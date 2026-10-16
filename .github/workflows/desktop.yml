@@ -72,7 +72,7 @@ jobs:
           make_latest: true
           files: release/*.exe
           body: |
-            **Instalador:** `PDF-Studio-…-x64-nsis.exe` (instala e cria atalho).
+            **Instalador:** `PDF-Studio-…-instalador.exe` (instala e cria atalho).
             **Portátil:** `PDF-Studio-…-portatil.exe` (roda sem instalar).
 
             O Windows pode mostrar "O Windows protegeu o computador" porque o programa não tem

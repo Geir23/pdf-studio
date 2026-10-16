@@ -86,15 +86,15 @@
             "x64"
           ]
         }
-      ],
-      "artifactName": "PDF-Studio-${version}-${arch}-${target}.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "PDF Studio"
+      "shortcutName": "PDF Studio",
+      "artifactName": "PDF-Studio-${version}-instalador.${ext}"
     },
     "portable": {
       "artifactName": "PDF-Studio-${version}-portatil.exe"
