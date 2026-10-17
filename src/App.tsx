@@ -2,6 +2,7 @@ import { Combine, FilePlus2, FolderOpen, Images, ScanText, ShieldCheck, Upload }
 import { useEffect, useState } from 'react';
 import { PDFDocument, PageSizes } from 'pdf-lib';
 import { Converter } from './components/Converter';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { DialogHost } from './components/dialogs';
 import { finishEditing } from './components/Overlay';
 import { Properties } from './components/Properties';
@@ -166,13 +167,13 @@ export default function App() {
       {hasDoc && mode === 'editor' && <EditBar />}
       <main>
         {mode === 'converter' ? (
-          <Converter />
+          <ErrorBoundary area="o Conversor"><Converter /></ErrorBoundary>
         ) : hasDoc ? (
-          <>
+          <ErrorBoundary area="o editor">
             <Sidebar panel={panel} setPanel={setPanel} />
             <Viewer />
             <Properties />
-          </>
+          </ErrorBoundary>
         ) : (
           <Welcome />
         )}

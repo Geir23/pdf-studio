@@ -38,6 +38,9 @@ computador**: todo o processamento (edição, OCR, assinatura) acontece localmen
 - Remove cabeçalhos, rodapés e números de página repetidos; une palavras hifenizadas
 - **OCR automático** onde o PDF não tem texto confiável: páginas escaneadas, texto que "não dá para copiar"
   (fontes sem mapa Unicode) e texto dentro de imagens; apaga bordas de tabela antes do OCR para ler as células
+- Feito para arquivos grandes: OCR em paralelo (um reconhecedor por núcleo), memória liberada página a
+  página, fotos pulam o OCR, botão Cancelar e estimativa de tempo (320 páginas com fotos: ~35 s;
+  escaneado: ~2 s por página num computador de 4 núcleos)
 
 **Ferramentas**
 - **OCR** (português e inglês) para tornar documentos escaneados pesquisáveis
@@ -88,6 +91,8 @@ npm run desktop:win   # gera o instalador (em um computador com Windows)
 npm test           # testes do núcleo (precisa do poppler-utils: pdftotext, pdfsig)
 npm run build && npm run test:e2e   # testes no Chromium, clicando como um usuário
 npm run test:converter               # Conversor no Chromium (lote com PDF, escaneado, imagem e Word)
+# carga: gere PDFs grandes e converta (mede tempo e memória, detecta travamento)
+node tests/fixtures/convert/make-stress.mjs /tmp/carga foto.jpg && npm run test:stress -- /tmp/carga/grande.pdf
 xvfb-run -a npm run test:desktop     # app desktop (Electron); rode depois do test:e2e
 ```
 

@@ -15,7 +15,8 @@
     "desktop": "npm run build && electron .",
     "desktop:win": "npm run build && electron-builder --win",
     "test:desktop": "node tests/e2e/desktop.mjs",
-    "test:converter": "node tests/e2e/converter.mjs"
+    "test:converter": "node tests/e2e/converter.mjs",
+    "test:stress": "node tests/e2e/stress.mjs"
   },
   "devDependencies": {
     "@pdf-lib/fontkit": "^1.1.1",

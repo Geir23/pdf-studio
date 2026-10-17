@@ -119,25 +119,25 @@ describe('formatos de saída', () => {
   it('HTML, Word, JSON, texto e ZIP com imagens', async () => {
     const doc = await convert('relatorio.pdf');
     const dec = (b: Uint8Array) => new TextDecoder().decode(b);
-    const html = dec(await render(doc, 'html', 'relatorio'));
+    const html = dec((await render(doc, 'html', 'relatorio')).bytes);
     expect(html).toContain('<h1>Relatório Técnico de Avaliação</h1>');
     expect(html).toMatch(/<table>[\s\S]*<td>Nordeste<\/td>/);
     expect(html).toContain('<strong>avaliação completa</strong>');
     expect(html).toContain('src="data:image/png;base64,');
 
-    const zip = await JSZip.loadAsync(await render(doc, 'md-zip', 'relatorio'));
+    const zip = await JSZip.loadAsync((await render(doc, 'md-zip', 'relatorio')).bytes);
     expect(Object.keys(zip.files).sort()).toEqual(['imagens/', 'imagens/pagina1-imagem1.png', 'relatorio.md']);
     const png = await zip.file('imagens/pagina1-imagem1.png')!.async('uint8array');
     expect([...png.subarray(1, 4)].map((c) => String.fromCharCode(c)).join('')).toBe('PNG');
 
-    const json = JSON.parse(dec(await render(doc, 'json', 'relatorio')));
+    const json = JSON.parse(dec((await render(doc, 'json', 'relatorio')).bytes));
     expect(json.blocos.find((b: { tipo: string }) => b.tipo === 'tabela').linhas[1]).toEqual(['Sul', '1.250', '92%']);
 
-    const txt = dec(await render(doc, 'txt', 'relatorio'));
+    const txt = dec((await render(doc, 'txt', 'relatorio')).bytes);
     expect(txt).toContain('Sul\t1.250\t92%');
     expect(txt).not.toContain('**');
 
-    const docx = await render(doc, 'docx', 'relatorio');
+    const docx = (await render(doc, 'docx', 'relatorio')).bytes;
     const dir = mkdtempSync(join(tmpdir(), 'docx-'));
     writeFileSync(join(dir, 'r.docx'), docx);
     const xml = execFileSync('unzip', ['-p', join(dir, 'r.docx'), 'word/document.xml'], { encoding: 'utf8' });
@@ -190,4 +190,55 @@ describe('segurança', () => {
     expect(html).not.toMatch(/<script/i); // vira texto: &lt;script&gt;
     expect(html).toContain('&lt;script&gt;');
   });
+});
+
+describe('desempenho', () => {
+  it('faz OCR de páginas em paralelo e respeita o limite de imagens', async () => {
+    const p = nodePlatform(2);
+    const d: ConvertDeps = { ...deps, platform: p };
+    const t0 = Date.now();
+    const doc = await convertInput({ name: 'relatorio-escaneado.pdf', bytes: read('relatorio-escaneado.pdf') }, d, OPTS);
+    expect(doc.ocrPages).toHaveLength(2);
+    expect(p.maxParallel).toBe(2);
+    const limited = await convertInput({ name: 'relatorio.pdf', bytes: read('relatorio.pdf') }, d, { ...OPTS, maxImageOcr: 0 });
+    expect(limited.ocrImages).toBe(0);
+    await p.close();
+    console.log(`OCR de 2 páginas em paralelo: ${Date.now() - t0} ms`);
+  }, 300_000);
+
+  it('cancelar interrompe a conversão', async () => {
+    const { ConversionCancelled } = await import('../../src/convert/engine');
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(convertInput({ name: 'relatorio.pdf', bytes: read('relatorio.pdf') }, deps, { ...OPTS, signal: ctrl.signal })).rejects.toBeInstanceOf(ConversionCancelled);
+  });
+
+  it('limita o tamanho da imagem de páginas enormes', async () => {
+    const { safeScale } = await import('../../src/convert/engine');
+    const s = safeScale(2384, 3370, 300); // folha A0
+    expect(2384 * s).toBeLessThanOrEqual(4600);
+    expect(2384 * s * 3370 * s).toBeLessThanOrEqual(16_000_001);
+    expect(safeScale(595, 842, 300)).toBeCloseTo(300 / 72);
+  });
+});
+
+describe('imagens extraídas', () => {
+  it('foto sai em JPEG (leve) e gráfico em PNG (nítido); foto não passa pelo OCR', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([595, 842]);
+    page.drawText('Relatório com uma foto e um gráfico de resultados do trimestre.', { x: 60, y: 780, size: 12 });
+    page.drawImage(await doc.embedJpg(read('foto.jpg')), { x: 60, y: 420, width: 480, height: 330 });
+    page.drawImage(await doc.embedPng(read('grafico.png')), { x: 60, y: 250, width: 450, height: 110 });
+    const p = nodePlatform(1);
+    const out = await convertInput({ name: 'fotos.pdf', bytes: await doc.save() }, { ...deps, platform: p }, OPTS);
+    await p.close();
+    const imgs = out.blocks.filter((b) => b.type === 'image');
+    expect(imgs.map((b) => b.type === 'image' && [b.name, b.mime])).toEqual([
+      ['pagina1-imagem1.jpg', 'image/jpeg'],
+      ['pagina1-imagem2.png', 'image/png'],
+    ]);
+    expect(out.ocrImages).toBe(1); // só o gráfico
+    expect(p.ocrCalls).toBe(1); // a foto é reconhecida como foto e pulada
+  }, 120_000);
 });

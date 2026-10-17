@@ -398,3 +398,7 @@ del + ins { margin-left: 3px; }
   .converter { flex-direction: column; }
   .conv-side { width: auto; border-right: 0; border-bottom: 1px solid var(--border); max-height: 50vh; }
 }
+
+.crash { margin: auto; max-width: 560px; text-align: center; padding: 32px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+.crash p { color: var(--muted); }
+.conv-actions .danger { flex: 1; justify-content: center; border-color: var(--danger); }

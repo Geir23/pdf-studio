@@ -66,11 +66,12 @@ export async function docxToMarkdown(bytes: Uint8Array): Promise<string> {
   return htmlToMarkdown(value);
 }
 
-function dataUrlBytes(url: string): Uint8Array | undefined {
-  const m = url.match(/^data:image\/png;base64,(.+)$/);
-  if (!m) return undefined;
-  const bin = atob(m[1]);
-  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+function dataUrlImage(url: string): { data?: Uint8Array; mime?: 'image/png' | 'image/jpeg'; ext: string } {
+  const m = url.match(/^data:(image\/(?:png|jpeg));base64,(.+)$/);
+  if (!m) return { ext: 'png' };
+  const bin = atob(m[2]);
+  const mime = m[1] as 'image/png' | 'image/jpeg';
+  return { data: Uint8Array.from(bin, (c) => c.charCodeAt(0)), mime, ext: mime === 'image/jpeg' ? 'jpg' : 'png' };
 }
 
 function inlineTokens(tokens: Token[] | undefined, fmt: Omit<Inline, 'text'> = {}): Inline[] {
@@ -115,8 +116,9 @@ export function markdownToBlocks(md: string): Block[] {
         const p = t as Tokens.Paragraph;
         for (const im of p.tokens.filter((x) => x.type === 'image') as Tokens.Image[]) {
           imageCount++;
-          blocks.push({ type: 'image', name: `imagem${imageCount}.png`, alt: im.text || `Imagem ${imageCount}`, page: 0,
-            rect: { x: 0, y: 0, w: 400, h: 300 }, png: dataUrlBytes(im.href) });
+          const img = dataUrlImage(im.href);
+          blocks.push({ type: 'image', name: `imagem${imageCount}.${img.ext}`, alt: im.text || `Imagem ${imageCount}`, page: 0,
+            rect: { x: 0, y: 0, w: 400, h: 300 }, data: img.data, mime: img.mime });
         }
         const content = inlineTokens(p.tokens);
         if (content.some((c) => c.text.trim())) blocks.push({ type: 'paragraph', content, page: 0 });

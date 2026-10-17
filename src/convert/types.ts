@@ -45,7 +45,7 @@ export type Block =
   | { type: 'paragraph'; content: Inline[]; page: number }
   | { type: 'list'; ordered: boolean; items: Inline[][]; page: number }
   | { type: 'table'; rows: string[][]; page: number }
-  | { type: 'image'; name: string; alt: string; page: number; rect: Rect; png?: Uint8Array };
+  | { type: 'image'; name: string; alt: string; page: number; rect: Rect; data?: Uint8Array; mime?: 'image/png' | 'image/jpeg' };
 
 export interface ConvertedDocument {
   title: string;
@@ -54,6 +54,8 @@ export interface ConvertedDocument {
   ocrPages: { page: number; reason: 'escaneada' | 'texto-ilegivel' }[];
   /** Imagens cujo texto foi reconhecido por OCR. */
   ocrImages: number;
+  /** O limite de imagens lidas por OCR foi atingido (algumas imagens ficaram sem leitura). */
+  imageOcrLimited?: boolean;
   pageCount: number;
 }
 

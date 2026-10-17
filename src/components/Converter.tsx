@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import { browserDeps, browserPlatform } from '../convert/browserPlatform';
 import { convertInput } from '../convert/convertFile';
-import { DEFAULT_OPTIONS, type ConvertOptions } from '../convert/engine';
+import { ConversionCancelled, DEFAULT_OPTIONS, type ConvertOptions } from '../convert/engine';
 import { ACCEPT, detectKind } from '../convert/inputs';
 import { blocksToMarkdown } from '../convert/markdown';
 import { FORMAT_INFO, render, type OutputFormat } from '../convert/outputs';
@@ -23,6 +23,7 @@ interface Job {
   status: 'aguardando' | 'convertendo' | 'pronto' | 'erro';
   progress: number;
   message: string;
+  startedAt?: number;
   result?: ConvertedDocument;
   error?: string;
 }
@@ -64,10 +65,13 @@ function loadOptions(): { format: OutputFormat; opts: ConvertOptions } {
 /** Arquivos enviados ao Conversor a partir de outras telas (ex.: documento aberto no editor). */
 export const converterInbox: { name: string; bytes: Uint8Array }[] = [];
 
-function toBase64(bytes: Uint8Array) {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
+/** Estimativa de tempo restante a partir do ritmo atual. */
+function remaining(j: Job): string {
+  if (!j.startedAt || j.progress < 0.04) return '';
+  const elapsed = (Date.now() - j.startedAt) / 1000;
+  const left = (elapsed / j.progress) * (1 - j.progress);
+  if (left < 20) return ' · quase pronto';
+  return left < 90 ? ` · ~${Math.round(left / 10) * 10} s restantes` : ` · ~${Math.round(left / 60)} min restantes`;
 }
 
 export function Converter() {
@@ -78,6 +82,7 @@ export function Converter() {
   const [opts, setOpts] = useState<ConvertOptions>(initial.opts);
   const [tab, setTab] = useState<'preview' | 'markdown'>('preview');
   const [running, setRunning] = useState(false);
+  const abort = useRef<AbortController | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const jobsRef = useRef(jobs);
   jobsRef.current = jobs;
@@ -117,6 +122,8 @@ export function Converter() {
     const pending = jobsRef.current.filter((j) => j.status === 'aguardando' || j.status === 'erro');
     if (!pending.length) return toast('Adicione arquivos para converter.');
     setRunning(true);
+    const controller = new AbortController();
+    abort.current = controller;
     let current = 0;
     const platform = browserPlatform((status, p) => {
       if (status === 'recognizing text') update(current, { progress: Math.max(0.05, p) });
@@ -125,20 +132,27 @@ export function Converter() {
     try {
       for (const job of pending) {
         current = job.id;
-        update(job.id, { status: 'convertendo', progress: 0, message: 'Iniciando…', error: undefined });
+        if (controller.signal.aborted) break;
+        update(job.id, { status: 'convertendo', progress: 0, message: 'Iniciando…', error: undefined, startedAt: Date.now() });
         try {
           const result = await convertInput({ name: job.name, bytes: job.bytes }, deps, {
             ...opts,
+            signal: controller.signal,
             onProgress: (message, progress) => update(job.id, { message, progress }),
           });
           update(job.id, { status: 'pronto', progress: 1, message: '', result });
           setSelected((s) => s ?? job.id);
         } catch (e) {
+          if (e instanceof ConversionCancelled) {
+            update(job.id, { status: 'aguardando', progress: 0, message: 'Cancelado' });
+            break;
+          }
           console.error(e);
           update(job.id, { status: 'erro', message: '', error: e instanceof Error ? e.message : String(e) });
         }
       }
     } finally {
+      abort.current = null;
       await platform.dispose();
       setRunning(false);
     }
@@ -147,8 +161,8 @@ export function Converter() {
   const save = async (job: Job) => {
     if (!job.result) return;
     const base = baseName(job.name);
-    const info = FORMAT_INFO[format];
-    download(await render(job.result, format, base), `${base}.${info.ext}`, info.mime);
+    const r = await render(job.result, format, base);
+    download(r.bytes, `${base}.${r.ext}`, r.mime);
   };
 
   const saveAll = async () => {
@@ -156,28 +170,36 @@ export function Converter() {
     if (!done.length) return toast('Nenhum arquivo convertido ainda.');
     if (done.length === 1) return save(done[0]);
     const zip = new JSZip();
-    const info = FORMAT_INFO[format];
     const bases = uniqueBases(done);
     for (const j of done) {
       const base = bases.get(j.id)!;
-      const data = await render(j.result!, format, base);
-      if (format === 'md-zip') {
+      const r = await render(j.result!, format, base);
+      if (r.ext === 'zip') {
         // Cada documento numa pasta própria, com suas imagens.
-        const inner = await JSZip.loadAsync(data);
+        const inner = await JSZip.loadAsync(r.bytes);
         for (const [path, f] of Object.entries(inner.files)) if (!f.dir) zip.file(`${base}/${path}`, await f.async('uint8array'));
-      } else zip.file(`${base}.${info.ext}`, data);
+      } else zip.file(`${base}.${r.ext}`, r.bytes);
     }
     download(await zip.generateAsync({ type: 'blob' }), 'convertidos.zip');
   };
 
   const sel = jobs.find((j) => j.id === selected);
   const markdown = useMemo(() => (sel?.result ? blocksToMarkdown(sel.result.blocks, { imageDir: 'imagens' }) : ''), [sel?.result]);
-  const previewHtml = useMemo(() => {
-    if (!sel?.result) return '';
-    // Pré-visualização com as imagens embutidas.
-    const blocks = sel.result.blocks.map((b) => (b.type === 'image' && b.png ? { ...b, name: `data:image/png;base64,${toBase64(b.png)}` } : b));
-    return marked.parse(blocksToMarkdown(blocks, { imageDir: '' }), { async: false, gfm: true }) as string;
+  // Pré-visualização: imagens por endereço temporário (blob:), nunca embutidas como texto —
+  // com centenas de imagens, o texto em base64 passaria do limite do navegador.
+  const preview = useMemo(() => {
+    if (!sel?.result) return { html: '', urls: [] as string[] };
+    const urls: string[] = [];
+    const blocks = sel.result.blocks.map((b) => {
+      if (b.type !== 'image' || !b.data) return b;
+      const url = URL.createObjectURL(new Blob([b.data as BlobPart], { type: b.mime ?? 'image/png' }));
+      urls.push(url);
+      return { ...b, name: url };
+    });
+    return { html: marked.parse(blocksToMarkdown(blocks, { imageDir: '' }), { async: false, gfm: true }) as string, urls };
   }, [sel?.result]);
+  useEffect(() => () => preview.urls.forEach((u) => URL.revokeObjectURL(u)), [preview]);
+  const previewHtml = preview.html;
 
   const set = (patch: Partial<ConvertOptions>) => setOpts((o) => ({ ...o, ...patch }));
 
@@ -220,13 +242,15 @@ export function Converter() {
                   <Trash2 size={14} />
                 </button>
               </div>
-              {j.status === 'convertendo' && (<><Progress value={j.progress} /><small>{j.message}</small></>)}
+              {j.status === 'convertendo' && (<><Progress value={j.progress} /><small>{j.message}{remaining(j)}</small></>)}
+              {j.status === 'aguardando' && j.message && <small>{j.message}</small>}
               {j.status === 'erro' && <small className="bad">{j.error}</small>}
               {j.result && (
                 <small>
                   {j.result.pageCount} pág. · {j.result.blocks.length} blocos
                   {j.result.ocrPages.length > 0 && ` · OCR em ${j.result.ocrPages.length} pág.`}
                   {j.result.ocrImages > 0 && ` · texto lido em ${j.result.ocrImages} imagem(ns)`}
+                  {j.result.imageOcrLimited && ' (limite de imagens atingido)'}
                 </small>
               )}
             </li>
@@ -259,9 +283,13 @@ export function Converter() {
         </div>
 
         <div className="conv-actions">
-          <button className="primary" onClick={runAll} disabled={running || !jobs.length}>
-            <ScanText size={16} /> {running ? 'Convertendo…' : 'Converter'}
-          </button>
+          {running ? (
+            <button className="danger" onClick={() => abort.current?.abort()}><XCircle size={16} /> Cancelar</button>
+          ) : (
+            <button className="primary" onClick={runAll} disabled={!jobs.length}>
+              <ScanText size={16} /> Converter
+            </button>
+          )}
           <button onClick={saveAll} disabled={!jobs.some((j) => j.result)}><Download size={16} /> Baixar {jobs.filter((j) => j.result).length > 1 ? 'todos (.zip)' : ''}</button>
         </div>
         <p className="privacy-note">Tudo é processado neste computador; nenhum arquivo é enviado para a internet.</p>

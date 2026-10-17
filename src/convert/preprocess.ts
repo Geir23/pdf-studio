@@ -73,3 +73,27 @@ export function whitenRules(img: PixelBuffer): number {
   }
   return n;
 }
+
+/**
+ * Fração dos pixels com a cor de fundo predominante (0–1). Gráficos, prints e páginas
+ * digitalizadas têm fundo liso (valor alto); fotos têm valor baixo e não valem o OCR.
+ */
+export function backgroundShare(img: PixelBuffer): number {
+  const hist = new Uint32Array(64);
+  let n = 0;
+  const step = Math.max(1, Math.floor(Math.sqrt((img.width * img.height) / 40000))); // ~40 mil amostras
+  for (let y = 0; y < img.height; y += step) {
+    for (let x = 0; x < img.width; x += step) {
+      const p = (y * img.width + x) * 4;
+      const lum = (0.299 * img.data[p] + 0.587 * img.data[p + 1] + 0.114 * img.data[p + 2]) | 0;
+      hist[lum >> 2]++;
+      n++;
+    }
+  }
+  let best = 0;
+  for (let i = 0; i < 64; i++) {
+    const around = hist[i] + (hist[i - 1] ?? 0) + (hist[i + 1] ?? 0);
+    if (around > best) best = around;
+  }
+  return n ? best / n : 0;
+}

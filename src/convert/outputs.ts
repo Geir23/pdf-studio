@@ -23,12 +23,18 @@ function toBase64(bytes: Uint8Array): string {
 
 /** Markdown com as imagens embutidas (data:), usado para HTML e pré-visualização. */
 function markdownWithInlineImages(blocks: Block[]): string {
-  const withData = blocks.map((b) => (b.type === 'image' && b.png ? { ...b, name: `data:image/png;base64,${toBase64(b.png)}` } : b));
+  const withData = blocks.map((b) => (b.type === 'image' && b.data ? { ...b, name: `data:${b.mime ?? 'image/png'};base64,${toBase64(b.data)}` } : b));
   return blocksToMarkdown(withData, { imageDir: '' });
 }
 
-export function toHtml(doc: ConvertedDocument): string {
-  const body = marked.parse(markdownWithInlineImages(doc.blocks), { async: false, gfm: true }) as string;
+/** Acima disso, o HTML vai num .zip com a pasta de imagens (embutir estouraria a memória). */
+const INLINE_IMAGES_LIMIT = 40 * 1024 * 1024;
+
+const imageBytes = (blocks: Block[]) => blocks.reduce((n, b) => n + (b.type === 'image' ? b.data?.length ?? 0 : 0), 0);
+
+export function toHtml(doc: ConvertedDocument, imageDir: string | null = null): string {
+  const md = imageDir === null ? markdownWithInlineImages(doc.blocks) : blocksToMarkdown(doc.blocks, { imageDir });
+  const body = marked.parse(md, { async: false, gfm: true }) as string;
   const title = doc.title.replace(/[<>&"]/g, '');
   return `<!doctype html>
 <html lang="pt-BR">
@@ -79,7 +85,7 @@ export function toJson(doc: ConvertedDocument): string {
 export async function toMarkdownZip(doc: ConvertedDocument, baseName: string): Promise<Uint8Array> {
   const zip = new JSZip();
   zip.file(`${baseName}.md`, blocksToMarkdown(doc.blocks, { imageDir: 'imagens' }));
-  for (const b of doc.blocks) if (b.type === 'image' && b.png) zip.file(`imagens/${b.name}`, b.png);
+  for (const b of doc.blocks) if (b.type === 'image' && b.data) zip.file(`imagens/${b.name}`, b.data);
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
 }
 
@@ -114,11 +120,11 @@ export async function toDocx(doc: ConvertedDocument): Promise<Uint8Array> {
         }),
       );
       children.push(new Paragraph({ children: [] }));
-    } else if (b.type === 'image' && b.png) {
+    } else if (b.type === 'image' && b.data) {
       const maxW = 560;
       const ratio = b.rect.h / b.rect.w || 0.5;
       const w = Math.min(maxW, b.rect.w * 1.33);
-      children.push(new Paragraph({ children: [new ImageRun({ type: 'png', data: b.png, transformation: { width: Math.round(w), height: Math.round(w * ratio) } })] }));
+      children.push(new Paragraph({ children: [new ImageRun({ type: b.mime === 'image/jpeg' ? 'jpg' : 'png', data: b.data, transformation: { width: Math.round(w), height: Math.round(w * ratio) } })] }));
     }
   }
   const list = (format: (typeof LevelFormat)[keyof typeof LevelFormat], text: string) => ({
@@ -137,14 +143,28 @@ export async function toDocx(doc: ConvertedDocument): Promise<Uint8Array> {
   return new Uint8Array(await Packer.toArrayBuffer(docx));
 }
 
-export async function render(doc: ConvertedDocument, format: OutputFormat, baseName: string): Promise<Uint8Array> {
-  const enc = (s: string) => new TextEncoder().encode(s);
+export interface Rendered {
+  bytes: Uint8Array;
+  ext: string;
+  mime: string;
+}
+
+export async function render(doc: ConvertedDocument, format: OutputFormat, baseName: string): Promise<Rendered> {
+  const enc = (str: string) => new TextEncoder().encode(str);
+  const info = FORMAT_INFO[format];
+  const out = (bytes: Uint8Array): Rendered => ({ bytes, ext: info.ext, mime: info.mime });
   switch (format) {
-    case 'md': return enc(blocksToMarkdown(doc.blocks, { imageDir: null }));
-    case 'md-zip': return toMarkdownZip(doc, baseName);
-    case 'html': return enc(toHtml(doc));
-    case 'docx': return toDocx(doc);
-    case 'txt': return enc(blocksToText(doc.blocks));
-    case 'json': return enc(toJson(doc));
+    case 'md': return out(enc(blocksToMarkdown(doc.blocks, { imageDir: null })));
+    case 'md-zip': return out(await toMarkdownZip(doc, baseName));
+    case 'html': {
+      if (imageBytes(doc.blocks) <= INLINE_IMAGES_LIMIT) return out(enc(toHtml(doc)));
+      const zip = new JSZip();
+      zip.file(`${baseName}.html`, toHtml(doc, 'imagens'));
+      for (const b of doc.blocks) if (b.type === 'image' && b.data) zip.file(`imagens/${b.name}`, b.data);
+      return { bytes: await zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }), ext: 'zip', mime: 'application/zip' };
+    }
+    case 'docx': return out(await toDocx(doc));
+    case 'txt': return out(enc(blocksToText(doc.blocks)));
+    case 'json': return out(enc(toJson(doc)));
   }
 }
